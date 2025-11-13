@@ -45,27 +45,38 @@ const DMSNames = ({ theme }) => {
           const sheet = workbook.Sheets[sheetName];
           const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
+          // ───────────────────────────────────────────────
+          // PROCESS: Extract Date + Cleaned Name + Debit
+          // ───────────────────────────────────────────────
+
           let cleanedCount = 0;
-          const cleanedData = jsonData.map((row) => {
-            return row.map((cell) => {
-              if (cell && typeof cell === "string") {
-                const cleaned = cell.replace(/\(\d+\)/g, "").trim();
-                if (cleaned !== cell) cleanedCount++;
-                return cleaned;
-              }
-              return cell;
-            });
+          const cleanedData = [["Date", "Name", "Debit"]];
+
+          jsonData.slice(1).forEach((row) => {
+            if (!row || row.length < 3) return;
+
+            const date = row[0] || "";
+            const rawName = row[1] || "";
+            const debit = row[2] || "";
+
+            let cleanedName = rawName
+              .toString()
+              .replace(/\(\d+\)/g, "")
+              .trim();
+            if (cleanedName !== rawName) cleanedCount++;
+
+            cleanedData.push([date, cleanedName, debit]);
           });
 
           const newSheet = XLSX.utils.aoa_to_sheet(cleanedData);
           const newWorkbook = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(newWorkbook, newSheet, sheetName);
+          XLSX.utils.book_append_sheet(newWorkbook, newSheet, "Cleaned");
 
           setProcessedData(newWorkbook);
           setResult({
             type: "success",
-            message: `Successfully cleaned ${cleanedCount} name entries`,
-            details: { cleanedCount, totalRows: jsonData.length - 1 },
+            message: `Successfully processed ${cleanedCount} entries`,
+            details: { cleanedCount, totalRows: cleanedData.length - 1 },
           });
         } catch (error) {
           setResult({
@@ -91,7 +102,7 @@ const DMSNames = ({ theme }) => {
 
   const downloadFile = () => {
     if (!processedData) return;
-    const fileName = "names_without_numbers.xlsx";
+    const fileName = "cleaned_date_name_debit.xlsx";
     XLSX.writeFile(processedData, fileName);
   };
 
@@ -103,10 +114,10 @@ const DMSNames = ({ theme }) => {
             isDark ? "text-white" : "text-gray-900"
           }`}
         >
-          DMS Names Cleaner
+          DMS Date + Name + Debit Extractor
         </h1>
         <p className={`${isDark ? "text-gray-400" : "text-gray-600"}`}>
-          Remove numbers from customer names for Tally entry
+          Extract Date, cleaned Name (without numbers) and Debit amount.
         </p>
       </div>
 
@@ -115,14 +126,14 @@ const DMSNames = ({ theme }) => {
           isDark ? "bg-gray-800/50 backdrop-blur-sm" : "bg-white"
         }`}
       >
-        {/* File Upload */}
+        {/* Upload */}
         <div className="mb-6">
           <label
             className={`block text-sm font-semibold mb-3 ${
               isDark ? "text-gray-300" : "text-gray-700"
             }`}
           >
-            Excel File with Names
+            Excel File
           </label>
           <div
             className={`relative border-2 border-dashed rounded-xl p-8 transition-all ${
@@ -143,6 +154,7 @@ const DMSNames = ({ theme }) => {
             />
             <div className="flex flex-col items-center">
               <FileSpreadsheet
+                size={48}
                 className={
                   inputFile
                     ? "text-green-500"
@@ -150,7 +162,6 @@ const DMSNames = ({ theme }) => {
                     ? "text-gray-400"
                     : "text-gray-500"
                 }
-                size={48}
               />
               <p
                 className={`mt-3 text-lg font-medium ${
@@ -159,29 +170,22 @@ const DMSNames = ({ theme }) => {
               >
                 {inputFile ? inputFile.name : "Click to upload Excel file"}
               </p>
-              <p
-                className={`mt-1 text-sm ${
-                  isDark ? "text-gray-500" : "text-gray-500"
-                }`}
-              >
-                Names like "HARISH K(123456)" will become "HARISH K"
-              </p>
             </div>
           </div>
         </div>
 
-        {/* Action Buttons */}
+        {/* Actions */}
         <div className="flex gap-4 mb-6">
           <button
             onClick={processFile}
             disabled={processing || !inputFile}
-            className={`flex-1 py-4 rounded-xl font-semibold transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none ${
+            className={`flex-1 py-4 rounded-xl font-semibold transition-all transform hover:scale-105 disabled:opacity-50 ${
               isDark
-                ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
-                : "bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white"
+                ? "bg-blue-600 hover:bg-blue-700 text-white"
+                : "bg-blue-500 hover:bg-blue-600 text-white"
             } shadow-lg`}
           >
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center gap-2 justify-center">
               {processing ? (
                 <>
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -199,7 +203,7 @@ const DMSNames = ({ theme }) => {
           <button
             onClick={downloadFile}
             disabled={!processedData}
-            className={`px-8 py-4 rounded-xl font-semibold transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none ${
+            className={`px-8 py-4 rounded-xl font-semibold transition-all hover:scale-105 disabled:opacity-50 ${
               isDark
                 ? "bg-green-600 hover:bg-green-700 text-white"
                 : "bg-green-500 hover:bg-green-600 text-white"
@@ -212,7 +216,7 @@ const DMSNames = ({ theme }) => {
           </button>
         </div>
 
-        {/* Result Display */}
+        {/* Result */}
         {result && (
           <div
             className={`p-6 rounded-xl ${
@@ -227,32 +231,31 @@ const DMSNames = ({ theme }) => {
           >
             <div className="flex items-start gap-3">
               {result.type === "success" ? (
-                <CheckCircle
-                  className="text-green-500 flex-shrink-0"
-                  size={24}
-                />
+                <CheckCircle className="text-green-500" size={24} />
               ) : (
-                <AlertCircle className="text-red-500 flex-shrink-0" size={24} />
+                <AlertCircle className="text-red-500" size={24} />
               )}
+
               <div>
                 <p
                   className={`font-semibold ${
                     result.type === "success"
                       ? "text-green-700"
                       : "text-red-700"
-                  } ${isDark && "brightness-150"}`}
+                  }`}
                 >
                   {result.message}
                 </p>
+
                 {result.details && (
-                  <div
-                    className={`mt-2 text-sm ${
-                      isDark ? "text-gray-300" : "text-gray-600"
-                    }`}
-                  >
-                    <p>Total rows: {result.details.totalRows}</p>
-                    <p>Names cleaned: {result.details.cleanedCount}</p>
-                  </div>
+                  <>
+                    <p className="text-sm mt-1">
+                      Total rows: {result.details.totalRows}
+                    </p>
+                    <p className="text-sm">
+                      Names cleaned: {result.details.cleanedCount}
+                    </p>
+                  </>
                 )}
               </div>
             </div>
