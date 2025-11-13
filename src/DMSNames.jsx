@@ -45,27 +45,87 @@ const DMSNames = ({ theme }) => {
           const sheet = workbook.Sheets[sheetName];
           const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-          // ───────────────────────────────────────────────
-          // PROCESS: Extract Date + Cleaned Name + Debit
-          // ───────────────────────────────────────────────
+          if (jsonData.length < 2) {
+            throw new Error("Excel sheet is empty or invalid.");
+          }
+
+          // ─────────────────────────────────────────────
+          // FIND REAL HEADER ROW (skip junk rows)
+          // ─────────────────────────────────────────────
+          let headerRowIndex = -1;
+
+          for (let i = 0; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            if (!row) continue;
+
+            const rowString = row.join(" ").toLowerCase();
+
+            if (
+              rowString.includes("date") &&
+              rowString.includes("particular") &&
+              rowString.includes("debit")
+            ) {
+              headerRowIndex = i;
+              break;
+            }
+          }
+
+          if (headerRowIndex === -1) {
+            throw new Error(
+              "Could not find header row (Date / Particulars / Debit)."
+            );
+          }
+
+          const header = jsonData[headerRowIndex];
+
+          // Detect columns
+          const dateCol = header.findIndex((h) => /date/i.test(h));
+          const nameCol = header.findIndex((h) => /particular/i.test(h));
+          const debitCol = header.findIndex((h) => /debit/i.test(h));
+
+          if (dateCol === -1 || nameCol === -1 || debitCol === -1) {
+            throw new Error(
+              "Found header row but could not detect Date / Particulars / Debit columns."
+            );
+          }
+
+          // ─────────────────────────────────────────────
+          // Excel serial date → YYYY-MM-DD
+          // ─────────────────────────────────────────────
+          const excelDateToString = (serial) => {
+            if (!serial || isNaN(serial)) return serial;
+            const excelEpoch = new Date(1899, 11, 30);
+            const date = new Date(excelEpoch.getTime() + serial * 86400000);
+            return date.toISOString().split("T")[0];
+          };
 
           let cleanedCount = 0;
           const cleanedData = [["Date", "Name", "Debit"]];
 
-          jsonData.slice(1).forEach((row) => {
-            if (!row || row.length < 3) return;
+          jsonData.slice(headerRowIndex + 1).forEach((row) => {
+            if (!row || row.length === 0) return;
 
-            const date = row[0] || "";
-            const rawName = row[1] || "";
-            const debit = row[2] || "";
+            const rawDate = row[dateCol];
+            const rawName = row[nameCol] || "";
+            const rawDebit = row[debitCol] || "";
 
-            let cleanedName = rawName
+            if (!rawName) return;
+
+            // Convert date if needed
+            const finalDate =
+              typeof rawDate === "number"
+                ? excelDateToString(rawDate)
+                : rawDate;
+
+            // Clean name: remove (12345)
+            const cleanedName = rawName
               .toString()
               .replace(/\(\d+\)/g, "")
               .trim();
+
             if (cleanedName !== rawName) cleanedCount++;
 
-            cleanedData.push([date, cleanedName, debit]);
+            cleanedData.push([finalDate, cleanedName, rawDebit]);
           });
 
           const newSheet = XLSX.utils.aoa_to_sheet(cleanedData);
@@ -75,7 +135,7 @@ const DMSNames = ({ theme }) => {
           setProcessedData(newWorkbook);
           setResult({
             type: "success",
-            message: `Successfully processed ${cleanedCount} entries`,
+            message: `Successfully processed ${cleanedCount} name entries`,
             details: { cleanedCount, totalRows: cleanedData.length - 1 },
           });
         } catch (error) {
@@ -117,7 +177,7 @@ const DMSNames = ({ theme }) => {
           DMS Date + Name + Debit Extractor
         </h1>
         <p className={`${isDark ? "text-gray-400" : "text-gray-600"}`}>
-          Extract Date, cleaned Name (without numbers) and Debit amount.
+          Extract valid Date, cleaned Name (without numbers), and Debit amount.
         </p>
       </div>
 
@@ -126,15 +186,16 @@ const DMSNames = ({ theme }) => {
           isDark ? "bg-gray-800/50 backdrop-blur-sm" : "bg-white"
         }`}
       >
-        {/* Upload */}
+        {/* File Upload */}
         <div className="mb-6">
           <label
             className={`block text-sm font-semibold mb-3 ${
               isDark ? "text-gray-300" : "text-gray-700"
             }`}
           >
-            Excel File
+            Upload Excel File
           </label>
+
           <div
             className={`relative border-2 border-dashed rounded-xl p-8 transition-all ${
               inputFile
@@ -152,9 +213,9 @@ const DMSNames = ({ theme }) => {
               onChange={handleFileUpload}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
+
             <div className="flex flex-col items-center">
               <FileSpreadsheet
-                size={48}
                 className={
                   inputFile
                     ? "text-green-500"
@@ -162,7 +223,9 @@ const DMSNames = ({ theme }) => {
                     ? "text-gray-400"
                     : "text-gray-500"
                 }
+                size={48}
               />
+
               <p
                 className={`mt-3 text-lg font-medium ${
                   isDark ? "text-gray-300" : "text-gray-700"
@@ -170,11 +233,20 @@ const DMSNames = ({ theme }) => {
               >
                 {inputFile ? inputFile.name : "Click to upload Excel file"}
               </p>
+
+              {/* Example text */}
+              <p
+                className={`mt-1 text-sm ${
+                  isDark ? "text-gray-500" : "text-gray-600"
+                }`}
+              >
+                Example: "HARISH K(1651651)" will become "HARISH K"
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Actions */}
+        {/* Buttons */}
         <div className="flex gap-4 mb-6">
           <button
             onClick={processFile}
@@ -185,7 +257,7 @@ const DMSNames = ({ theme }) => {
                 : "bg-blue-500 hover:bg-blue-600 text-white"
             } shadow-lg`}
           >
-            <div className="flex items-center gap-2 justify-center">
+            <div className="flex items-center justify-center gap-2">
               {processing ? (
                 <>
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -216,7 +288,7 @@ const DMSNames = ({ theme }) => {
           </button>
         </div>
 
-        {/* Result */}
+        {/* Result Display */}
         {result && (
           <div
             className={`p-6 rounded-xl ${
