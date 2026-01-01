@@ -94,10 +94,14 @@ const DMSNames = ({ theme }) => {
           // ─────────────────────────────────────────────
           const excelDateToString = (serial) => {
             if (!serial || isNaN(serial)) return serial;
-            const excelEpoch = new Date(1899, 11, 30);
-            const date = new Date(excelEpoch.getTime() + serial * 86400000);
-            return date.toISOString().split("T")[0];
-          };
+            const utcDays = Math.floor(serial - 25569);
+            const utcValue = utcDays * 86400;
+            const dateInfo = new Date(utcValue * 1000);
+            const year = dateInfo.getUTCFullYear();
+            const month = String(dateInfo.getUTCMonth() + 1).padStart(2, "0");
+            const day = String(dateInfo.getUTCDate()).padStart(2, "0");
+            return `${year}-${month}-${day}`;
+          };  
 
           let cleanedCount = 0;
           const cleanedData = [["Date", "Name", "Debit"]];
