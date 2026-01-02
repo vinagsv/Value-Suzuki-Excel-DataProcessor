@@ -356,7 +356,7 @@ const AttendanceProvider = ({ children }) => {
   const loadDefaultFile = async () => {
     setIsLoadingDefault(true);
     try {
-      const fileId = "1xS3pTaYpBqWcMBSQkuaLgIqLUBxc_bv9";
+      const fileId = "1GsBHpjNwETxjUX0XkTC4OTNr3pClR_JZ";
       const url = `https://docs.google.com/spreadsheets/d/${fileId}/export?format=xlsx`;
 
       const response = await fetch(url);
