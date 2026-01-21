@@ -22,9 +22,7 @@ const seedDatabase = async () => {
 
     // 1. Seed Vehicles (For Gate Pass Search)
     const vehicles = [
-      { chassis: 'MB81234567', name: 'Rahul Dravid', model: 'ACCESS 125', color: 'White' },
-      { chassis: 'MB87654321', name: 'Anil Kumble', model: 'BURGMAN', color: 'Matte Black' },
-      { chassis: 'MB89988776', name: 'Virat Kohli', model: 'AVENIS', color: 'Green' }
+      { chassis: 'MB81234567', name: 'vinag sv', model: 'ACCESS 125', color: 'White' },
     ];
 
     for (const v of vehicles) {
@@ -37,7 +35,7 @@ const seedDatabase = async () => {
     // 2. Seed Gate Pass (Includes one old one to test deletion later)
     await client.query(`
       INSERT INTO gate_passes (date, customer_name, model, color, regn_no, chassis_no, sales_bill_no)
-      VALUES (CURRENT_DATE, 'Suresh Raina', 'ACCESS 125', 'Silver', 'KA-04-MZ-1234', 'MB81239999', 'SB-001')
+      VALUES (CURRENT_DATE, 'Vinag SV', 'ACCESS 125', 'Silver', 'KA-04-MZ-1234', 'MB81239999', 'SB-001')
     `);
     
     // Old entry (60 days ago)
@@ -49,7 +47,7 @@ const seedDatabase = async () => {
     // 3. Seed Receipts
     await client.query(`
       INSERT INTO receipts (date, customer_name, amount, payment_mode, hp_financier, model)
-      VALUES (CURRENT_DATE, 'MS Dhoni', 125000, 'Online', 'HDFC Bank', 'HAYABUSA')
+      VALUES (CURRENT_DATE, 'Vinag SV', 125000, 'Online', 'HDFC Bank', 'HAYABUSA')
     `);
 
     await client.query('COMMIT');

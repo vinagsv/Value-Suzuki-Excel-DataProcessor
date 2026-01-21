@@ -6,7 +6,7 @@ const { pool } = require('../db');
 router.get('/next', async (req, res) => {
   try {
     const max = await pool.query("SELECT MAX(receipt_no) as max_no FROM receipts");
-    const nextNo = (max.rows[0].max_no || 707) + 1;
+    const nextNo = (max.rows[0].max_no || 712) + 1;
     res.json({ nextNo });
   } catch (err) {
     res.status(500).json({ error: err.message });
