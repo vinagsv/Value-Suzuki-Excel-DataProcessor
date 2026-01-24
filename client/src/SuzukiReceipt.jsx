@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { ToWords } from 'to-words';
-import { Printer, RefreshCw, Download, Search } from 'lucide-react';
+import { Printer, RefreshCw, FileSpreadsheet, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_URL = import.meta.env.VITE_API_URL;
 
 const toWords = new ToWords({
   localeCode: 'en-IN',
@@ -52,6 +52,10 @@ const SuzukiReceipt = ({ theme }) => {
 
   const [history, setHistory] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Export States
+  const [availableMonths, setAvailableMonths] = useState([]);
+  const [exportMonth, setExportMonth] = useState('');
 
   // --- API Calls ---
 
@@ -75,9 +79,22 @@ const SuzukiReceipt = ({ theme }) => {
     }
   };
 
+  const fetchAvailableMonths = async () => {
+    try {
+      const res = await fetch(`${API_URL}/receipts/months`);
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableMonths(data);
+      }
+    } catch (err) {
+      console.error("Error fetching months", err);
+    }
+  };
+
   useEffect(() => {
     fetchNextReceiptNo();
     fetchHistory();
+    fetchAvailableMonths();
   }, []);
 
   // --- Handlers ---
@@ -109,6 +126,7 @@ const SuzukiReceipt = ({ theme }) => {
 
       await fetchNextReceiptNo();
       await fetchHistory();
+      await fetchAvailableMonths();
     } catch (err) {
       console.error("Failed to save receipt", err);
       alert("Error saving receipt to database.");
@@ -145,9 +163,9 @@ const SuzukiReceipt = ({ theme }) => {
     );
   }, [history, searchTerm]);
 
-  const handleExport = () => {
-    if (filteredHistory.length === 0) return alert("No data to export");
-    const dataToExport = filteredHistory.map(item => ({
+  const processExport = (data, filename) => {
+    if (!data || data.length === 0) return alert("No data to export");
+    const dataToExport = data.map(item => ({
       "Receipt No": item.receipt_no,
       "Date": new Date(item.date).toLocaleDateString(),
       "Customer Name": item.customer_name,
@@ -160,7 +178,22 @@ const SuzukiReceipt = ({ theme }) => {
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Receipts");
-    XLSX.writeFile(workbook, "Receipts_Export.xlsx");
+    XLSX.writeFile(workbook, filename);
+  };
+
+  const handleExport = async () => {
+    if (exportMonth) {
+        try {
+            const res = await fetch(`${API_URL}/receipts/list?month=${exportMonth}`);
+            const data = await res.json();
+            processExport(data, `Receipts_Export_${exportMonth}.xlsx`);
+        } catch (err) {
+            alert("Failed to fetch monthly data");
+            console.error(err);
+        }
+    } else {
+        processExport(filteredHistory, "Receipts_Export_Recent.xlsx");
+    }
   };
 
   // --- Styles ---
@@ -298,15 +331,31 @@ const SuzukiReceipt = ({ theme }) => {
       <div className={`rounded-xl shadow-lg p-6 ${isDark ? "bg-gray-800" : "bg-white"}`}>
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
           <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-800"}`}>Receipt History</h2>
-          <div className="flex gap-4 w-full md:w-auto">
-            <div className="relative flex-1 md:w-64">
-              <input placeholder="Search Customer..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`w-full pl-10 pr-4 py-2 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-50 border-gray-300"} focus:outline-none focus:ring-2 focus:ring-blue-500`} />
-              <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-            </div>
-            <button onClick={handleExport} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors">
-              <Download size={18} /> Export
-            </button>
+          
+          <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto items-center">
+             <div className="relative flex-1 w-full md:w-64">
+               <input placeholder="Search displayed..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`w-full pl-10 pr-4 py-2 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-50 border-gray-300"} focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+               <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+             </div>
+             
+             {/* NEW EXPORT CONTROLS */}
+             <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg border border-gray-300 w-full md:w-auto">
+                 <select 
+                     className="bg-transparent text-sm p-1 outline-none text-gray-700 font-medium w-full md:w-auto"
+                     value={exportMonth}
+                     onChange={(e) => setExportMonth(e.target.value)}
+                 >
+                     <option value="">Current View (Last 500)</option>
+                     {availableMonths.map(m => (
+                         <option key={m} value={m}>{m} (Full Month)</option>
+                     ))}
+                 </select>
+                 <button onClick={handleExport} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm font-bold whitespace-nowrap transition-colors">
+                     <FileSpreadsheet size={16} /> Export
+                 </button>
+             </div>
           </div>
+
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">

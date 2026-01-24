@@ -13,11 +13,22 @@ router.get('/next', async (req, res) => {
   }
 });
 
+// Get Available Months (For Export Dropdown)
+router.get('/months', async (req, res) => {
+  try {
+    // Returns list like ['2023-10', '2023-09']
+    const result = await pool.query("SELECT DISTINCT to_char(date, 'YYYY-MM') as month_str FROM receipts ORDER BY month_str DESC");
+    res.json(result.rows.map(r => r.month_str));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Save Receipt + Auto Cleanup
 router.post('/', async (req, res) => {
   let { date, customer_name, amount, payment_mode, hp_financier, model } = req.body;
   
-  // 🛡️ Fix: Handle empty amount to prevent DB crash
+  // Handle empty amount to prevent DB crash
   if (amount === '' || amount === undefined || amount === null) {
       amount = 0;
   }
@@ -48,10 +59,23 @@ router.post('/', async (req, res) => {
   }
 });
 
-// List History
+// List History (with optional month filter)
 router.get('/list', async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM receipts ORDER BY receipt_no DESC LIMIT 500");
+    const { month } = req.query;
+    let query = "SELECT * FROM receipts";
+    let params = [];
+
+    if (month) {
+      // Filter by specific month (Postgres syntax)
+      query += " WHERE to_char(date, 'YYYY-MM') = $1 ORDER BY receipt_no DESC";
+      params.push(month);
+    } else {
+      // Default view (Last 500)
+      query += " ORDER BY receipt_no DESC LIMIT 500";
+    }
+
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -7,12 +7,12 @@ import {
   Download,
   ChevronDown,
   ChevronUp,
-  Database,     // Icon for DB
-  Loader2       // Icon for Spinner
+  Database,     
+  Loader2       
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_URL = import.meta.env.VITE_API_URL;
 
 const VahanConverter = ({ theme }) => {
   const [form22File, setForm22File] = useState(null);

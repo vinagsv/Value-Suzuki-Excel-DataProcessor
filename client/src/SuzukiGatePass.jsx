@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useReactToPrint } from 'react-to-print';
-import { Printer, Search, Download } from 'lucide-react';
+import { Printer, Search, Download, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_URL = import.meta.env.VITE_API_URL;
 
 const SuzukiGatePass = ({ theme }) => {
   const isDark = theme === 'dark';
@@ -25,15 +25,20 @@ const SuzukiGatePass = ({ theme }) => {
     regnNo: '',
     chassisNo: '',
     model: '',
-    color: ''
+    color: '',
+    narration: ''
   });
 
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  
+  // History & Export States
   const [history, setHistory] = useState([]);
   const [historySearchTerm, setHistorySearchTerm] = useState('');
+  const [availableMonths, setAvailableMonths] = useState([]);
+  const [exportMonth, setExportMonth] = useState(''); 
 
   // --- API Calls ---
 
@@ -57,9 +62,22 @@ const SuzukiGatePass = ({ theme }) => {
     }
   };
 
+  const fetchAvailableMonths = async () => {
+    try {
+      const res = await fetch(`${API_URL}/gatepass/months`);
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableMonths(data);
+      }
+    } catch (err) {
+      console.error("Error fetching months", err);
+    }
+  };
+
   useEffect(() => {
     fetchNextPassNo();
     fetchHistory();
+    fetchAvailableMonths();
   }, []);
 
   // --- Search Logic (Debounced) ---
@@ -68,7 +86,6 @@ const SuzukiGatePass = ({ theme }) => {
     setSearchQuery(e.target.value);
   };
 
-  // Debounce Timer
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery);
@@ -76,7 +93,6 @@ const SuzukiGatePass = ({ theme }) => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Perform API Call
   useEffect(() => {
     const searchDb = async () => {
         if (debouncedQuery.length >= 3) {
@@ -99,6 +115,7 @@ const SuzukiGatePass = ({ theme }) => {
   }, [debouncedQuery]);
 
   const selectVehicle = (vehicle) => {
+    // Maps Form22 data to GatePass fields
     setFormData(prev => ({
       ...prev,
       customerName: vehicle.customer_name || '',
@@ -128,12 +145,14 @@ const SuzukiGatePass = ({ theme }) => {
                 chassis_no: formData.chassisNo,
                 sales_bill_no: formData.salesBillNo,
                 spares_bill_no: formData.sparesBillNo,
-                service_bill_no: formData.serviceBillNo
+                service_bill_no: formData.serviceBillNo,
+                narration: formData.narration
             })
         });
         
         await fetchNextPassNo();
         await fetchHistory();
+        await fetchAvailableMonths();
         
         setFormData(prev => ({
             ...prev,
@@ -142,7 +161,8 @@ const SuzukiGatePass = ({ theme }) => {
             chassisNo: '',
             salesBillNo: '',
             sparesBillNo: '',
-            serviceBillNo: ''
+            serviceBillNo: '',
+            narration: ''
         }));
     } catch (err) {
         console.error("Failed to save gate pass", err);
@@ -157,7 +177,8 @@ const SuzukiGatePass = ({ theme }) => {
     onAfterPrint: saveToDb
   });
 
-  // --- Export History ---
+  // --- Export Logic ---
+  
   const filteredHistory = useMemo(() => {
     if (!historySearchTerm) return history;
     const lower = historySearchTerm.toLowerCase();
@@ -169,22 +190,41 @@ const SuzukiGatePass = ({ theme }) => {
     );
   }, [history, historySearchTerm]);
 
-  const handleExport = () => {
-    if (filteredHistory.length === 0) return alert("No data to export");
-    const dataToExport = filteredHistory.map(item => ({
+  const processExport = (data, filename) => {
+    if (!data || data.length === 0) return alert("No data to export");
+    
+    const dataToExport = data.map(item => ({
       "Pass No": item.pass_no,
       "Date": new Date(item.date).toLocaleDateString(),
       "Customer": item.customer_name,
       "Model": item.model,
       "Chassis No": item.chassis_no,
       "Regn No": item.regn_no,
-      "Sales Bill": item.sales_bill_no
+      "Sales Bill": item.sales_bill_no,
+      "Spares Bill": item.spares_bill_no,
+      "Service Bill": item.service_bill_no,
+      "Narration": item.narration
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "GatePasses");
-    XLSX.writeFile(workbook, "GatePass_Export.xlsx");
+    XLSX.writeFile(workbook, filename);
+  };
+
+  const handleExport = async () => {
+    if (exportMonth) {
+        try {
+            const res = await fetch(`${API_URL}/gatepass/list?month=${exportMonth}`);
+            const data = await res.json();
+            processExport(data, `GatePass_Export_${exportMonth}.xlsx`);
+        } catch (err) {
+            alert("Failed to fetch monthly data");
+            console.error(err);
+        }
+    } else {
+        processExport(filteredHistory, "GatePass_Export_Recent.xlsx");
+    }
   };
 
   // --- Styles ---
@@ -252,6 +292,12 @@ const SuzukiGatePass = ({ theme }) => {
                <div><label className={labelClass}>Spares Bill No</label><input name="sparesBillNo" value={formData.sparesBillNo} onChange={handleChange} className={inputClass} /></div>
                <div><label className={labelClass}>Service Bill No</label><input name="serviceBillNo" value={formData.serviceBillNo} onChange={handleChange} className={inputClass} /></div>
              </div>
+             {/* NARRATION FIELD */}
+             <div className="mt-2">
+                <label className={labelClass}>Narration / Remarks</label>
+                <input name="narration" value={formData.narration} onChange={handleChange} className={inputClass} placeholder="Enter remarks..." />
+             </div>
+
              <button onClick={handlePrint} className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all">
                <Printer size={20} /> Save & Print
              </button>
@@ -265,38 +311,42 @@ const SuzukiGatePass = ({ theme }) => {
              </style>
              <div className="transform scale-[0.8] lg:scale-100 origin-top bg-white shadow-2xl">
                 <div ref={componentRef} className="print-container text-black font-sans relative flex flex-col" style={{ width: '210mm', height: LAYOUT.height, paddingLeft: LAYOUT.paddingX, paddingRight: LAYOUT.paddingX, paddingTop: LAYOUT.paddingY, backgroundColor: 'white' }}>
-                    {/* Header */}
-                    <div className="flex justify-between items-start mb-1">
-                        <div className="w-[45%]"><img src="/suzuki-logo.png" alt="Suzuki" style={{width:'220px'}} onError={(e)=>{e.target.style.display='none'}}/></div>
-                        <div className="w-[55%] text-right pt-2">
-                             <h1 className="text-lg font-extrabold uppercase">VALUE MOTOR AGENCY PVT LTD</h1>
-                             <p className="text-[11px] font-bold">#16/A, MILLERS ROAD VASANTH NAGAR, BANGALORE - 52</p>
-                        </div>
-                    </div>
-                    <div className="flex justify-center mb-4"><div className="border-b-2 border-black w-full text-center py-1"><span className="text-xl font-black uppercase tracking-[0.2em]">GATE PASS</span></div></div>
-                    {/* Dynamic Data */}
-                    <div className="flex justify-between items-center mb-3 text-sm font-bold"><div>NO: <span className="text-red-600 text-lg ml-1">{formData.passNo}</span></div><div>DATE: <span className="ml-1 text-base">{new Date(formData.date).toLocaleDateString('en-GB')}</span></div></div>
-                    <div className="flex flex-col gap-y-2 text-sm">
-                        {hasValue(formData.customerName) && <div className="flex items-end"><span className="font-bold mr-2 uppercase w-36 shrink-0">Customer Name:</span><span className="border-b border-dotted border-black min-w-[50%] px-2 font-bold text-base uppercase">{formData.customerName}</span></div>}
-                        <div className="flex items-end gap-4">
-                            {hasValue(formData.model) && <div className="flex items-end flex-1"><span className="font-bold mr-2 uppercase w-16 shrink-0">Model:</span><span className="border-b border-dotted border-black flex-grow px-2 font-bold text-sm uppercase">{formData.model}</span></div>}
-                            {hasValue(formData.color) && <div className="flex items-end flex-1"><span className="font-bold mr-2 uppercase w-16 shrink-0">Color:</span><span className="border-b border-dotted border-black flex-grow px-2 font-bold text-sm uppercase">{formData.color}</span></div>}
-                        </div>
-                        <div className="flex items-end gap-4">
-                            {hasValue(formData.regnNo) && <div className="flex items-end flex-1"><span className="font-bold mr-2 uppercase w-24 shrink-0">Veh Reg No:</span><span className="border-b border-dotted border-black flex-grow px-2 font-bold text-sm uppercase">{formData.regnNo}</span></div>}
-                            {hasValue(formData.chassisNo) && <div className="flex items-end flex-1"><span className="font-bold mr-2 uppercase w-24 shrink-0">Chassis No:</span><span className="border-b border-dotted border-black flex-grow px-2 font-bold text-sm uppercase">{formData.chassisNo}</span></div>}
-                        </div>
-                        {hasValue(formData.salesBillNo) && <div className="flex items-end w-3/4"><span className="font-bold mr-2 uppercase w-32 shrink-0">Sales Bill No:</span><span className="border-b border-dotted border-black flex-grow px-2 font-medium text-sm uppercase">{formData.salesBillNo}</span></div>}
-                        {hasValue(formData.sparesBillNo) && <div className="flex items-end w-3/4"><span className="font-bold mr-2 uppercase w-32 shrink-0">Spares Bill No:</span><span className="border-b border-dotted border-black flex-grow px-2 font-medium text-sm uppercase">{formData.sparesBillNo}</span></div>}
-                        {hasValue(formData.serviceBillNo) && <div className="flex items-end w-3/4"><span className="font-bold mr-2 uppercase w-32 shrink-0">Service Bill No:</span><span className="border-b border-dotted border-black flex-grow px-2 font-medium text-sm uppercase">{formData.serviceBillNo}</span></div>}
-                    </div>
+                   {/* Header */}
+                   <div className="flex justify-between items-start mb-1">
+                       <div className="w-[45%]"><img src="/suzuki-logo.png" alt="Suzuki" style={{width:'220px'}} onError={(e)=>{e.target.style.display='none'}}/></div>
+                       <div className="w-[55%] text-right pt-2">
+                            <h1 className="text-lg font-extrabold uppercase">VALUE MOTOR AGENCY PVT LTD</h1>
+                            <p className="text-[11px] font-bold">#16/A, MILLERS ROAD VASANTH NAGAR, BANGALORE - 52</p>
+                       </div>
+                   </div>
+                   <div className="flex justify-center mb-4"><div className="border-b-2 border-black w-full text-center py-1"><span className="text-xl font-black uppercase tracking-[0.2em]">GATE PASS</span></div></div>
+                   
+                   {/* Dynamic Data */}
+                   <div className="flex justify-between items-center mb-3 text-sm font-bold"><div>NO: <span className="text-red-600 text-lg ml-1">{formData.passNo}</span></div><div>DATE: <span className="ml-1 text-base">{new Date(formData.date).toLocaleDateString('en-GB')}</span></div></div>
+                   <div className="flex flex-col gap-y-2 text-sm">
+                       {hasValue(formData.customerName) && <div className="flex items-end"><span className="font-bold mr-2 uppercase w-36 shrink-0">Customer Name:</span><span className="border-b border-dotted border-black min-w-[50%] px-2 font-bold text-base uppercase">{formData.customerName}</span></div>}
+                       <div className="flex items-end gap-4">
+                           {hasValue(formData.model) && <div className="flex items-end flex-1"><span className="font-bold mr-2 uppercase w-16 shrink-0">Model:</span><span className="border-b border-dotted border-black flex-grow px-2 font-bold text-sm uppercase">{formData.model}</span></div>}
+                           {hasValue(formData.color) && <div className="flex items-end flex-1"><span className="font-bold mr-2 uppercase w-16 shrink-0">Color:</span><span className="border-b border-dotted border-black flex-grow px-2 font-bold text-sm uppercase">{formData.color}</span></div>}
+                       </div>
+                       <div className="flex items-end gap-4">
+                           {hasValue(formData.regnNo) && <div className="flex items-end flex-1"><span className="font-bold mr-2 uppercase w-24 shrink-0">Veh Reg No:</span><span className="border-b border-dotted border-black flex-grow px-2 font-bold text-sm uppercase">{formData.regnNo}</span></div>}
+                           {hasValue(formData.chassisNo) && <div className="flex items-end flex-1"><span className="font-bold mr-2 uppercase w-24 shrink-0">Chassis No:</span><span className="border-b border-dotted border-black flex-grow px-2 font-bold text-sm uppercase">{formData.chassisNo}</span></div>}
+                       </div>
+                       {hasValue(formData.salesBillNo) && <div className="flex items-end w-3/4"><span className="font-bold mr-2 uppercase w-32 shrink-0">Sales Bill No:</span><span className="border-b border-dotted border-black flex-grow px-2 font-medium text-sm uppercase">{formData.salesBillNo}</span></div>}
+                       {hasValue(formData.sparesBillNo) && <div className="flex items-end w-3/4"><span className="font-bold mr-2 uppercase w-32 shrink-0">Spares Bill No:</span><span className="border-b border-dotted border-black flex-grow px-2 font-medium text-sm uppercase">{formData.sparesBillNo}</span></div>}
+                       {hasValue(formData.serviceBillNo) && <div className="flex items-end w-3/4"><span className="font-bold mr-2 uppercase w-32 shrink-0">Service Bill No:</span><span className="border-b border-dotted border-black flex-grow px-2 font-medium text-sm uppercase">{formData.serviceBillNo}</span></div>}
+                       
+                       {/* NARRATION IN PRINT */}
+                       {hasValue(formData.narration) && <div className="flex items-end w-full mt-2"><span className="font-bold mr-2 uppercase w-32 shrink-0">Narration:</span><span className="border-b border-dotted border-black flex-grow px-2 font-medium text-sm uppercase">{formData.narration}</span></div>}
+                   </div>
 
                  
-                    <div className="mt-[80px] flex justify-end">
-                        <div className="text-center">
-                            <div className="border-t border-black px-6 pt-1 text-xs font-bold">Authorised Signatory</div>
-                        </div>
-                    </div>
+                   <div className="mt-[80px] flex justify-end">
+                       <div className="text-center">
+                           <div className="border-t border-black px-6 pt-1 text-xs font-bold">Authorised Signatory</div>
+                       </div>
+                   </div>
                 </div>
              </div>
         </div>
@@ -304,28 +354,47 @@ const SuzukiGatePass = ({ theme }) => {
 
       {/* HISTORY */}
       <div className={`rounded-xl shadow-lg p-6 ${isDark ? "bg-gray-800" : "bg-white"}`}>
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
             <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-800"}`}>History</h2>
-            <div className="flex gap-4">
-                <input value={historySearchTerm} onChange={(e) => setHistorySearchTerm(e.target.value)} className={`${inputClass} w-64`} placeholder="Search history..." />
-                <button onClick={handleExport} className="bg-green-600 text-white px-4 py-2 rounded-lg flex gap-2"><Download size={18} /> Export</button>
+            <div className="flex gap-2 items-center flex-wrap">
+                <input value={historySearchTerm} onChange={(e) => setHistorySearchTerm(e.target.value)} className={`${inputClass} w-48`} placeholder="Search displayed..." />
+                
+                {/* Export Controls */}
+                <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg border border-gray-300">
+                    <select 
+                        className="bg-transparent text-sm p-1 outline-none text-gray-700 font-medium"
+                        value={exportMonth}
+                        onChange={(e) => setExportMonth(e.target.value)}
+                    >
+                        <option value="">Current View (Last 500)</option>
+                        {availableMonths.map(m => (
+                            <option key={m} value={m}>{m} (Full Month)</option>
+                        ))}
+                    </select>
+                    <button onClick={handleExport} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm font-bold flex gap-2 items-center transition-colors">
+                        <FileSpreadsheet size={16} /> Export
+                    </button>
+                </div>
             </div>
         </div>
-        <table className="w-full">
-            <thead>
-                <tr><th className={tableHeaderClass}>Pass No</th><th className={tableHeaderClass}>Date</th><th className={tableHeaderClass}>Customer</th><th className={tableHeaderClass}>Chassis</th></tr>
-            </thead>
-            <tbody>
-                {filteredHistory.map(item => (
-                    <tr key={item.pass_no} className={tableRowClass}>
-                        <td className="px-4 py-3">{item.pass_no}</td>
-                        <td className="px-4 py-3">{new Date(item.date).toLocaleDateString()}</td>
-                        <td className="px-4 py-3">{item.customer_name}</td>
-                        <td className="px-4 py-3">{item.chassis_no}</td>
-                    </tr>
-                ))}
-            </tbody>
-        </table>
+        <div className="overflow-x-auto">
+            <table className="w-full">
+                <thead>
+                    <tr><th className={tableHeaderClass}>Pass No</th><th className={tableHeaderClass}>Date</th><th className={tableHeaderClass}>Customer</th><th className={tableHeaderClass}>Chassis</th><th className={tableHeaderClass}>Narration</th></tr>
+                </thead>
+                <tbody>
+                    {filteredHistory.map(item => (
+                        <tr key={item.pass_no} className={tableRowClass}>
+                            <td className="px-4 py-3">{item.pass_no}</td>
+                            <td className="px-4 py-3">{new Date(item.date).toLocaleDateString()}</td>
+                            <td className="px-4 py-3">{item.customer_name}</td>
+                            <td className="px-4 py-3">{item.chassis_no}</td>
+                            <td className="px-4 py-3 text-xs text-gray-500 max-w-[150px] truncate">{item.narration}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
       </div>
     </div>
   );
