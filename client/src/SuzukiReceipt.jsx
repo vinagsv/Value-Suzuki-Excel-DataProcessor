@@ -100,7 +100,10 @@ const SuzukiReceipt = ({ theme }) => {
   // --- Handlers ---
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    const finalValue = name === 'hp' ? value.toUpperCase() : value;
+
+    setFormData({ ...formData, [name]: finalValue });
   };
 
   const saveToDb = async () => {
