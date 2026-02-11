@@ -501,7 +501,11 @@ const AttendanceProvider = ({ children }) => {
       // 2. Working Days Count (P + HLF)
       const workedDays = stats.totalPresent + stats.halfDay; 
 
-      stats.salaryDays = workedDays + paidLeaves;
+      // 3. Raw Salary Days Calculation
+      const calculatedSalaryDays = workedDays + paidLeaves;
+
+      // 4. CAP: Salary Days cannot exceed Total Days in Month
+      stats.salaryDays = Math.min(calculatedSalaryDays, stats.totalDays);
 
       return stats;
     },
@@ -877,7 +881,7 @@ const Detail = () => {
                     
                     <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200 mb-4 flex flex-col justify-center items-start">
                         <div className="w-full">
-                            <div className="text-sm text-indigo-800 font-bold uppercase tracking-wide">💰 Salary Days</div>
+                            <div className="text-sm text-indigo-800 font-bold uppercase tracking-wide"> Salary Days</div>
                             <div className="text-4xl font-extrabold text-indigo-700 mt-1">{stats.salaryDays} <span className="text-xl font-normal text-indigo-600">days</span></div>
                             <div className="text-sm text-indigo-700 mt-2 font-medium bg-indigo-100 inline-block px-3 py-1 rounded-lg">
                                 Month Total: <span className="font-bold">{stats.totalDays} Days</span> 
