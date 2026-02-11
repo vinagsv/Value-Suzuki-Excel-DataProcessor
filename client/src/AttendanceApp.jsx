@@ -460,20 +460,26 @@ const AttendanceProvider = ({ children }) => {
           }
       }
 
+      let sundaysWorked = 0;
+
       employee.attendance.forEach((record) => {
         switch (record.status) {
           case "P":
             stats.totalPresent++;
             if (!record.timeStatus?.late) stats.onTime++;
+            // Track if they worked on a Sunday
+            if (record.isSunday) sundaysWorked++;
             break;
           case "A":
-            // --- CHANGE: Only count as Absent if NOT a Sunday ---
+            // Count absences only on non-Sundays initially
             if (!record.isSunday) {
                 stats.absent++;
             }
             break;
           case "HLF":
             stats.halfDay++;
+            // Count Half Day on Sunday as working on Sunday for Comp Off purposes
+            if (record.isSunday) sundaysWorked++;
             break;
         }
 
@@ -482,6 +488,11 @@ const AttendanceProvider = ({ children }) => {
           if (record.timeStatus.early) stats.earlyLeave++;
         }
       });
+
+      // --- COMPENSATORY OFF LOGIC ---
+      // If employee worked on Sunday, deduct that from their Absent count.
+      // Math.max ensures we don't show negative absents.
+      stats.absent = Math.max(0, stats.absent - sundaysWorked);
 
       // --- SALARY CALCULATION LOGIC ---
       // 1. Paid Leaves (Sundays + 1 Extra)
