@@ -467,7 +467,10 @@ const AttendanceProvider = ({ children }) => {
             if (!record.timeStatus?.late) stats.onTime++;
             break;
           case "A":
-            stats.absent++;
+            // --- CHANGE: Only count as Absent if NOT a Sunday ---
+            if (!record.isSunday) {
+                stats.absent++;
+            }
             break;
           case "HLF":
             stats.halfDay++;
@@ -853,8 +856,6 @@ const Detail = () => {
 
               {(() => {
                 const stats = getEmployeeStats(selectedEmployee);
-                // Calculate Unpaid Days: Total Days - Salary Days
-                // Ensure it's not negative (if bonus days exceed month length)
                 const unpaidDays = Math.max(0, stats.totalDays - stats.salaryDays);
 
                 return (
