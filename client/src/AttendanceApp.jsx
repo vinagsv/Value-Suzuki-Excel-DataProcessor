@@ -15,7 +15,7 @@ const AttendanceProvider = ({ children }) => {
   const [employees, setEmployees] = useState([]);
   const [month, setMonth] = useState("");
   const [year, setYear] = useState("");
-  const [availableMonths, setAvailableMonths] = useState([]); 
+  const [availableMonths, setAvailableMonths] = useState([]);
   const [fileUploaded, setFileUploaded] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState("");
   const [isLoadingDefault, setIsLoadingDefault] = useState(false);
@@ -25,11 +25,13 @@ const AttendanceProvider = ({ children }) => {
   const convertTo12Hour = (time24) => {
     if (!time24 || time24 === "-" || time24 === "nan") return "-";
     // Handle Excel decimal time
-    if (typeof time24 === 'number') {
-        const totalMins = Math.round(time24 * 24 * 60);
-        const h = Math.floor(totalMins / 60);
-        const m = totalMins % 60;
-        return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+    if (typeof time24 === "number") {
+      const totalMins = Math.round(time24 * 24 * 60);
+      const h = Math.floor(totalMins / 60);
+      const m = totalMins % 60;
+      return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${
+        h >= 12 ? "PM" : "AM"
+      }`;
     }
     const [hours, minutes] = String(time24).split(":").map(Number);
     if (isNaN(hours) || isNaN(minutes)) return time24;
@@ -73,7 +75,7 @@ const AttendanceProvider = ({ children }) => {
   };
 
   const getWeekOfMonth = (day, month, year) => {
-     const months = {
+    const months = {
       January: 0, February: 1, March: 2, April: 3, May: 4, June: 5,
       July: 6, August: 7, September: 8, October: 9, November: 10, December: 11,
     };
@@ -88,7 +90,7 @@ const AttendanceProvider = ({ children }) => {
       return { status: "A", label: "Absent" };
     }
     if (!outTime || outTime === "-" || outTime === "nan") {
-      return { status: "HLF", label: "Half Day" };
+      return { status: "HLF", label: "Half Day (No Out Time)" };
     }
     const [inHour, inMin] = String(inTime).split(":").map(Number);
     const [outHour, outMin] = String(outTime).split(":").map(Number);
@@ -96,21 +98,17 @@ const AttendanceProvider = ({ children }) => {
     const inMinutes = inHour * 60 + inMin;
     const outMinutes = outHour * 60 + outMin;
 
-    const lateThreshold = 9 * 60 + 20; // 9:20 AM
-    const earlyThreshold = 18 * 60 + 50; // 6:50 PM
+    let workedMinutes = outMinutes - inMinutes;
+    if (workedMinutes < 0) workedMinutes += 24 * 60;
 
-    if (inMinutes > lateThreshold || outMinutes < earlyThreshold) {
+    // 9 hours 40 minutes = 580 minutes
+    const fullDayThreshold = 580; 
+
+    if (workedMinutes >= fullDayThreshold) {
+      return { status: "P", label: "Present" };
+    } else {
       return { status: "HLF", label: "Half Day" };
     }
-
-    const workedMinutes = outMinutes - inMinutes;
-    const workedHours = workedMinutes / 60;
-
-    if (workedHours < 4) {
-      return { status: "HLF", label: "Half Day" };
-    }
-
-    return { status: "P", label: "Present" };
   };
 
   const getTimeStatus = (inTime, outTime) => {
@@ -119,12 +117,12 @@ const AttendanceProvider = ({ children }) => {
     const [inHour, inMin] = String(inTime).split(":").map(Number);
     const inMinutes = inHour * 60 + inMin;
 
-    const lateThreshold = 9 * 60 + 20;
+    const lateThreshold = 9 * 60 + 20; // 9:20 AM
 
     let status = {};
 
     if (inMinutes > lateThreshold) {
-      const lateBy = inMinutes - 9 * 60;
+      const lateBy = inMinutes - 9 * 60; 
       const lateHours = Math.floor(lateBy / 60);
       const lateMins = lateBy % 60;
       status.late = `${lateHours}h ${lateMins}m`;
@@ -133,10 +131,10 @@ const AttendanceProvider = ({ children }) => {
     if (outTime && outTime !== "-" && outTime !== "nan") {
       const [outHour, outMin] = String(outTime).split(":").map(Number);
       const outMinutes = outHour * 60 + outMin;
-      const earlyThreshold = 18 * 60 + 50;
+      const earlyThreshold = 18 * 60 + 50; // 6:50 PM
 
       if (outMinutes < earlyThreshold) {
-        const earlyBy = 19 * 60 - outMinutes;
+        const earlyBy = 19 * 60 - outMinutes; 
         const earlyHours = Math.floor(earlyBy / 60);
         const earlyMins = earlyBy % 60;
         status.early = `${earlyHours}h ${earlyMins}m`;
@@ -147,7 +145,14 @@ const AttendanceProvider = ({ children }) => {
   };
 
   const calculateWorkingHours = (inTime, outTime) => {
-    if (!inTime || inTime === "-" || !outTime || outTime === "-" || inTime === "nan" || outTime === "nan") {
+    if (
+      !inTime ||
+      inTime === "-" ||
+      !outTime ||
+      outTime === "-" ||
+      inTime === "nan" ||
+      outTime === "nan"
+    ) {
       return "-";
     }
     const [inHour, inMin] = String(inTime).split(":").map(Number);
@@ -167,7 +172,7 @@ const AttendanceProvider = ({ children }) => {
       .padStart(2, "0")}`;
   };
 
-  // --- NEW: Prioritize "Period" Row for Correct Month ---
+  // --- Detect Month Logic ---
   const detectMonthsAndYear = (rows) => {
     const months = [
       "January", "February", "March", "April", "May", "June",
@@ -176,49 +181,52 @@ const AttendanceProvider = ({ children }) => {
     let detectedMonth = "";
     let detectedYear = "";
 
-    // 1. Search for 'Period' row (Correct date)
+    // 1. Search for 'Period' row
     for (let i = 0; i < Math.min(rows.length, 20); i++) {
-        const row = rows[i];
-        if(!Array.isArray(row)) continue;
-        const rowStr = row.join(" ");
-        
-        // Only look if row has "Period" word
-        if (rowStr.includes("Period")) {
-            const periodMatch = rowStr.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-            if (periodMatch) {
-                const m = parseInt(periodMatch[2]);
-                if (m >= 1 && m <= 12) {
-                    detectedMonth = months[m - 1];
-                    detectedYear = periodMatch[3];
-                    return { selectedMonth: detectedMonth, detectedYear };
-                }
-            }
+      const row = rows[i];
+      if (!Array.isArray(row)) continue;
+      const rowStr = row.join(" ");
+
+      if (rowStr.includes("Period")) {
+        const periodMatch = rowStr.match(
+          /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/
+        );
+        if (periodMatch) {
+          const m = parseInt(periodMatch[2]);
+          if (m >= 1 && m <= 12) {
+            detectedMonth = months[m - 1];
+            detectedYear = periodMatch[3];
+            return { selectedMonth: detectedMonth, detectedYear };
+          }
         }
+      }
     }
 
-    // 2. Fallback: Take ANY date if Period not found (e.g. Run Date)
+    // 2. Fallback
     if (!detectedMonth) {
-        for (let i = 0; i < Math.min(rows.length, 20); i++) {
-            const row = rows[i];
-            if(!Array.isArray(row)) continue;
-            const rowStr = row.join(" ");
-            const dateMatch = rowStr.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-            if (dateMatch) {
-                const m = parseInt(dateMatch[2]);
-                if (m >= 1 && m <= 12) {
-                    detectedMonth = months[m - 1];
-                    detectedYear = dateMatch[3];
-                    break;
-                }
-            }
+      for (let i = 0; i < Math.min(rows.length, 20); i++) {
+        const row = rows[i];
+        if (!Array.isArray(row)) continue;
+        const rowStr = row.join(" ");
+        const dateMatch = rowStr.match(
+          /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/
+        );
+        if (dateMatch) {
+          const m = parseInt(dateMatch[2]);
+          if (m >= 1 && m <= 12) {
+            detectedMonth = months[m - 1];
+            detectedYear = dateMatch[3];
+            break;
+          }
         }
+      }
     }
-    
+
     // 3. Default to today
     if (!detectedMonth) {
-        const today = new Date();
-        detectedMonth = months[today.getMonth()];
-        detectedYear = today.getFullYear().toString();
+      const today = new Date();
+      detectedMonth = months[today.getMonth()];
+      detectedYear = today.getFullYear().toString();
     }
 
     return { selectedMonth: detectedMonth, detectedYear };
@@ -233,10 +241,9 @@ const AttendanceProvider = ({ children }) => {
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         if (!Array.isArray(row) || row.length === 0) continue;
-        
+
         const firstCell = String(row[0]).trim();
-        
-        // Robust Employee ID Detection
+
         if (firstCell.includes("Employee ID")) {
           const idMatch = firstCell.match(/Employee ID\s*[:|-]\s*([^;]+)/i);
           const nameMatch = firstCell.match(/Employee Name\s*[:|-]\s*([^;]+)/i);
@@ -252,21 +259,24 @@ const AttendanceProvider = ({ children }) => {
           };
           continue;
         }
-        
+
         if (currentEmployee && firstCell.toLowerCase().includes("in_time")) {
           const inRow = row;
           const outRow = rows[i + 1] ? rows[i + 1] : [];
-          
+
           for (let day = 1; day <= daysInMonth; day++) {
-            // Excel index matches day index (Col 1 = Day 1)
             const inTime = excelTimeToString(inRow[day]);
             const outTime = excelTimeToString(outRow[day]);
             const dayOfWeek = getDayOfWeek(day, selectedMonth, detectedYear);
-            const weekOfMonth = getWeekOfMonth(day, selectedMonth, detectedYear);
+            const weekOfMonth = getWeekOfMonth(
+              day,
+              selectedMonth,
+              detectedYear
+            );
             const workingHours = calculateWorkingHours(inTime, outTime);
             const statusInfo = calculateStatus(inTime, outTime);
             const timeStatus = getTimeStatus(inTime, outTime);
-            
+
             currentEmployee.attendance.push({
               day,
               date: `${day}/${selectedMonth.substring(0, 3)}/${detectedYear}`,
@@ -299,34 +309,49 @@ const AttendanceProvider = ({ children }) => {
 
   const fetchAvailableMonths = async () => {
     try {
-        const res = await fetch(`${API_URL}/attendance/list-months`);
-        if(res.ok) {
-            const data = await res.json();
-            const formatted = data.map(f => `${f.month}-${f.year}`);
-            setAvailableMonths(formatted);
-            
-            // Auto load first if available and no data
-            if(data.length > 0 && employees.length === 0) {
-                 loadMonthData(data[0].month, data[0].year);
-            }
+      const res = await fetch(`${API_URL}/attendance/list-months`);
+      if (res.ok) {
+        const data = await res.json();
+        const monthMap = {
+          January: 0, February: 1, March: 2, April: 3, May: 4, June: 5,
+          July: 6, August: 7, September: 8, October: 9, November: 10, December: 11
+        };
+
+        const sortedData = data.sort((a, b) => {
+          if (parseInt(b.year) !== parseInt(a.year)) {
+            return parseInt(b.year) - parseInt(a.year); 
+          }
+          return monthMap[b.month] - monthMap[a.month]; 
+        });
+
+        const formatted = sortedData.map((f) => `${f.month}-${f.year}`);
+        setAvailableMonths(formatted);
+
+        if (sortedData.length > 0 && employees.length === 0) {
+          loadMonthData(sortedData[0].month, sortedData[0].year);
         }
-    } catch (err) { console.error("Error fetching months", err); }
+      }
+    } catch (err) {
+      console.error("Error fetching months", err);
+    }
   };
 
   const loadMonthData = async (m, y) => {
     setIsLoadingDefault(true);
     try {
-        const res = await fetch(`${API_URL}/attendance/get-data?month=${m}&year=${y}`);
-        if(!res.ok) throw new Error("Data not found");
-        const { data, fileName } = await res.json();
-        
-        setMonth(m);
-        setYear(y);
-        parseFile(data, fileName, m, y);
+      const res = await fetch(
+        `${API_URL}/attendance/get-data?month=${m}&year=${y}`
+      );
+      if (!res.ok) throw new Error("Data not found");
+      const { data, fileName } = await res.json();
+
+      setMonth(m);
+      setYear(y);
+      parseFile(data, fileName, m, y);
     } catch (error) {
-        console.error("Error loading file: ", error);
+      console.error("Error loading file: ", error);
     } finally {
-        setIsLoadingDefault(false);
+      setIsLoadingDefault(false);
     }
   };
 
@@ -338,42 +363,45 @@ const AttendanceProvider = ({ children }) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // 1. Parse Locally
     const reader = new FileReader();
     reader.onload = async (evt) => {
-        const bstr = evt.target.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
-        const wsname = wb.SheetNames[0];
-        const data = XLSX.utils.sheet_to_json(wb.Sheets[wsname], { header: 1 });
-        
-        const { selectedMonth, detectedYear } = detectMonthsAndYear(data);
-        
-        setMonth(selectedMonth);
-        setYear(detectedYear);
-        const result = parseFile(data, file.name, selectedMonth, detectedYear);
+      const bstr = evt.target.result;
+      const wb = XLSX.read(bstr, { type: "binary" });
+      const wsname = wb.SheetNames[0];
+      const data = XLSX.utils.sheet_to_json(wb.Sheets[wsname], {
+        header: 1,
+      });
 
-        // 2. Upload to Server
-        if (result.success && result.count > 0) {
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('month', selectedMonth);
-            formData.append('year', detectedYear);
+      const { selectedMonth, detectedYear } = detectMonthsAndYear(data);
 
-            try {
-                const res = await fetch(`${API_URL}/attendance/upload`, { method: 'POST', body: formData });
-                if (res.ok) {
-                    await fetchAvailableMonths();
-                }
-            } catch (err) {
-                console.error("Background upload failed", err);
-            }
+      setMonth(selectedMonth);
+      setYear(detectedYear);
+      const result = parseFile(data, file.name, selectedMonth, detectedYear);
+
+      if (result.success && result.count > 0) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("month", selectedMonth);
+        formData.append("year", detectedYear);
+
+        try {
+          const res = await fetch(`${API_URL}/attendance/upload`, {
+            method: "POST",
+            body: formData,
+          });
+          if (res.ok) {
+            await fetchAvailableMonths();
+          }
+        } catch (err) {
+          console.error("Background upload failed", err);
         }
+      }
     };
     reader.readAsBinaryString(file);
   };
 
   const handleMonthChange = (val) => {
-    if(!val) return;
+    if (!val) return;
     const [m, y] = val.split("-");
     loadMonthData(m, y);
   };
@@ -399,10 +427,14 @@ const AttendanceProvider = ({ children }) => {
     isLoadingDefault,
     getStatusColor: (status) => {
       switch (status) {
-        case "P": return "bg-green-100 text-green-800 border-green-300";
-        case "A": return "bg-red-100 text-red-800 border-red-300";
-        case "HLF": return "bg-yellow-100 text-yellow-800 border-yellow-300";
-        default: return "bg-gray-100 text-gray-600 border-gray-300";
+        case "P":
+          return "bg-green-100 text-green-800 border-green-300";
+        case "A":
+          return "bg-red-100 text-red-800 border-red-300";
+        case "HLF":
+          return "bg-yellow-100 text-yellow-800 border-yellow-300";
+        default:
+          return "bg-gray-100 text-gray-600 border-gray-300";
       }
     },
     getEmployeeStats: (employee) => {
@@ -414,7 +446,20 @@ const AttendanceProvider = ({ children }) => {
         late: 0,
         earlyLeave: 0,
         totalDays: month && year ? getDaysInMonth(month, year) : 0,
+        sundaysInMonth: 0,
+        salaryDays: 0,
       };
+
+      // Calculate Sundays in the month
+      if (month && year) {
+          const daysInMonth = getDaysInMonth(month, year);
+          for (let d = 1; d <= daysInMonth; d++) {
+             if (getDayOfWeek(d, month, year) === "Sun") {
+                 stats.sundaysInMonth++;
+             }
+          }
+      }
+
       employee.attendance.forEach((record) => {
         switch (record.status) {
           case "P":
@@ -426,14 +471,24 @@ const AttendanceProvider = ({ children }) => {
             break;
           case "HLF":
             stats.halfDay++;
-            stats.totalPresent++;
             break;
         }
+
         if (record.timeStatus) {
           if (record.timeStatus.late) stats.late++;
           if (record.timeStatus.early) stats.earlyLeave++;
         }
       });
+
+      // --- SALARY CALCULATION LOGIC ---
+      // 1. Paid Leaves (Sundays + 1 Extra)
+      const paidLeaves = stats.sundaysInMonth + 1; 
+
+      // 2. Working Days Count (P + HLF)
+      const workedDays = stats.totalPresent + stats.halfDay; 
+
+      stats.salaryDays = workedDays + paidLeaves;
+
       return stats;
     },
   };
@@ -511,8 +566,7 @@ const Dashboard = () => {
             📅 Attendance Dashboard
           </h1>
           <p className="text-gray-600">
-            Track employee attendance • Office: 9:00 AM - 7:00 PM • Late after
-            9:20 AM • Early before 6:50 PM
+            Full Day: &ge; 9h 40m • Half Day: &lt; 9h 40m (Paid Full) • Paid Sundays • +1 Extra Leave
           </p>
           {month && year && (
             <p className="text-sm text-blue-600 mt-2">
@@ -590,10 +644,10 @@ const Dashboard = () => {
                       ID
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">
-                      Total Present
+                       Salary Days
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">
-                      On Time
+                      Total Present
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">
                       Half Day
@@ -603,9 +657,6 @@ const Dashboard = () => {
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">
                       Late Arrivals
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">
-                      Early Leaves
                     </th>
                   </tr>
                 </thead>
@@ -625,11 +676,11 @@ const Dashboard = () => {
                         <td className="px-4 py-3 text-sm text-gray-500">
                           {emp.id}
                         </td>
+                         <td className="px-4 py-3 text-sm text-indigo-700 font-bold bg-indigo-50">
+                          {stats.salaryDays}
+                        </td>
                         <td className="px-4 py-3 text-sm text-green-600 font-semibold">
                           {stats.totalPresent}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-blue-600 font-semibold">
-                          {stats.onTime}
                         </td>
                         <td className="px-4 py-3 text-sm text-yellow-600 font-semibold">
                           {stats.halfDay}
@@ -639,9 +690,6 @@ const Dashboard = () => {
                         </td>
                         <td className="px-4 py-3 text-sm text-orange-600 font-semibold">
                           {stats.late}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-purple-600 font-semibold">
-                          {stats.earlyLeave}
                         </td>
                       </tr>
                     );
@@ -734,7 +782,14 @@ const Detail = () => {
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           <div className="lg:col-span-1">
-            <div className="bg-white shadow-xl rounded-2xl p-4 h-[80vh] overflow-y-auto">
+            <div className="bg-white shadow-xl rounded-2xl p-4 h-[80vh] flex flex-col">
+              <button
+                onClick={() => navigate("/")}
+                className="w-full mb-4 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition flex items-center justify-center gap-2"
+              >
+                <span>⬅</span> Back to Dashboard
+              </button>
+
               <div className="mb-4">
                 <h3 className="text-lg font-bold text-gray-800 mb-2">
                   👥 Select Employee
@@ -747,7 +802,7 @@ const Detail = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 overflow-y-auto flex-1">
                 {filteredEmployees.map((emp) => (
                   <div
                     key={emp.id}
@@ -766,12 +821,6 @@ const Detail = () => {
                 ))}
               </div>
             </div>
-            <button
-              onClick={() => navigate("/")}
-              className="w-full mt-4 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition"
-            >
-              Back to Dashboard
-            </button>
           </div>
 
           <div className="lg:col-span-3">
@@ -804,23 +853,40 @@ const Detail = () => {
 
               {(() => {
                 const stats = getEmployeeStats(selectedEmployee);
+                // Calculate Unpaid Days: Total Days - Salary Days
+                // Ensure it's not negative (if bonus days exceed month length)
+                const unpaidDays = Math.max(0, stats.totalDays - stats.salaryDays);
+
                 return (
                   <div className="mb-6">
                     <h3 className="text-lg font-semibold text-gray-800 mb-3">
                       Monthly Summary
                     </h3>
+                    
+                    <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200 mb-4 flex flex-col justify-center items-start">
+                        <div className="w-full">
+                            <div className="text-sm text-indigo-800 font-bold uppercase tracking-wide">💰 Salary Days</div>
+                            <div className="text-4xl font-extrabold text-indigo-700 mt-1">{stats.salaryDays} <span className="text-xl font-normal text-indigo-600">days</span></div>
+                            <div className="text-sm text-indigo-700 mt-2 font-medium bg-indigo-100 inline-block px-3 py-1 rounded-lg">
+                                Month Total: <span className="font-bold">{stats.totalDays} Days</span> 
+                                <span className="mx-2 text-indigo-400">|</span> 
+                                Actual Absent (Unpaid): <span className="font-bold text-red-600">{unpaidDays} Days</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                         <div className="text-xs text-gray-600 mb-1">
-                          Total Days Present (Full + Half)
+                          Total Present Count
                         </div>
                         <div className="text-xl font-bold text-green-600">
-                          {stats.totalPresent} / {stats.totalDays}
+                          {stats.totalPresent}
                         </div>
                       </div>
                       <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                         <div className="text-xs text-gray-600 mb-1">
-                          On Time (Full Present)
+                          Full Days (On Time)
                         </div>
                         <div className="text-xl font-bold text-blue-600">
                           {stats.onTime}
@@ -864,31 +930,19 @@ const Detail = () => {
               <div className="mb-4 flex flex-wrap gap-3 p-3 bg-gray-50 rounded-lg text-xs">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                  <span>Present (on time & worked 4+ hrs)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                  <span>Absent (no in-time)</span>
+                  <span>Present (Work &ge; 9h 40m)</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                  <span>Half Day (late/early/no out-time)</span>
+                  <span>Half Day (Work &lt; 9h 40m)</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-semibold">
-                    LATE
-                  </div>
-                  <span>After 9:20 AM</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-semibold">
-                    EARLY
-                  </div>
-                  <span>Before 6:50 PM</span>
+                  <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                  <span>Absent</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-3 bg-yellow-200 border border-yellow-400"></div>
-                  <span>Sunday</span>
+                  <span>Sunday (Paid)</span>
                 </div>
               </div>
 
@@ -953,7 +1007,7 @@ const Detail = () => {
                             </span>
                             {record.timeStatus?.late && (
                               <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-700 rounded font-semibold w-fit">
-                                Late by {record.timeStatus.late}
+                                Late {record.timeStatus.late}
                               </span>
                             )}
                           </div>
@@ -962,7 +1016,8 @@ const Detail = () => {
                           <div className="flex flex-col gap-1">
                             <span
                               className={`font-semibold ${
-                                record.outTime !== "-" && record.outTime !== "nan"
+                                record.outTime !== "-" &&
+                                record.outTime !== "nan"
                                   ? "text-purple-600"
                                   : "text-gray-400"
                               }`}
@@ -971,7 +1026,7 @@ const Detail = () => {
                             </span>
                             {record.timeStatus?.early && (
                               <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded font-semibold w-fit">
-                                Early by {record.timeStatus.early}
+                                Early {record.timeStatus.early}
                               </span>
                             )}
                           </div>
