@@ -25,8 +25,8 @@ const port = process.env.PORT || 5000;
  * --- MIDDLEWARE CONFIGURATION ---
  */
 app.use(cors({
-  // Ensure this matches your Vite frontend URL
-  origin: process.env.CLIENT_URL || 'http://localhost:5173', 
+  // strictly use the environment variable
+  origin: process.env.CLIENT_URL, 
   credentials: true // Crucial for HttpOnly Cookies to work
 }));
 
