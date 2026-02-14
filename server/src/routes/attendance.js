@@ -1,11 +1,14 @@
-const express = require('express');
-const router = express.Router();
-const multer = require('multer');
-const xlsx = require('xlsx');
-const { pool } = require('../db');
+import express from 'express';
+import multer from 'multer';
+import xlsx from 'xlsx';
+import { pool } from '../config/db.js';
 
+const router = express.Router();
 const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB Limit
+});
 
 // 1. Get List of Available Months
 router.get('/list-months', async (req, res) => {
@@ -74,4 +77,4 @@ router.post('/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

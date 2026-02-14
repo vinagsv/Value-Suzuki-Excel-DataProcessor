@@ -1,11 +1,14 @@
-const express = require('express');
-const router = express.Router();
-const multer = require('multer');
-const xlsx = require('xlsx');
-const { pool } = require('../db');
+import express from 'express';
+import multer from 'multer';
+import xlsx from 'xlsx';
+import { pool } from '../config/db.js';
 
+const router = express.Router();
 const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB Limit
+});
 
 // Helper to find column name regardless of casing/spacing
 const findKey = (row, candidates) => {
@@ -27,7 +30,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
   try {
     await client.query('BEGIN');
     
-    // 1. Clear old data (Requirement: Whole previous data deleted)
+    // 1. Clear old data
     await client.query('TRUNCATE TABLE form22_vehicles RESTART IDENTITY');
     
     const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
@@ -56,13 +59,12 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       }
     }
 
-    // 3. Manual Batch Insert (No pg-format needed)
+    // 3. Manual Batch Insert
     if (vehiclesToInsert.length > 0) {
         const chunkSize = 500;
         for (let i = 0; i < vehiclesToInsert.length; i += chunkSize) {
             const chunk = vehiclesToInsert.slice(i, i + chunkSize);
             
-            // Manually build ($1, $2, $3, $4), ($5, $6... strings
             const placeholders = chunk.map((_, idx) => 
                 `($${idx * 4 + 1}, $${idx * 4 + 2}, $${idx * 4 + 3}, $${idx * 4 + 4})`
             ).join(',');
@@ -105,4 +107,4 @@ router.get('/search', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

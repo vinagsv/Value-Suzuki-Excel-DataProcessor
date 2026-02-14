@@ -1,11 +1,12 @@
-const express = require('express');
-const router = express.Router();
-const { pool } = require('../db');
+import express from 'express';
+import { pool } from '../config/db.js';
 
-// Get Next Receipt Number
+const router = express.Router();
+
+// Get Next DP Receipt Number
 router.get('/next', async (req, res) => {
   try {
-    const max = await pool.query("SELECT MAX(receipt_no) as max_no FROM receipts");
+    const max = await pool.query("SELECT MAX(receipt_no) as max_no FROM dp_receipts");
     const nextNo = (max.rows[0].max_no || 712) + 1;
     res.json({ nextNo });
   } catch (err) {
@@ -13,65 +14,70 @@ router.get('/next', async (req, res) => {
   }
 });
 
-// Get Available Months (For Export Dropdown)
+// Get Available Months
 router.get('/months', async (req, res) => {
   try {
-    // Returns list like ['2023-10', '2023-09']
-    const result = await pool.query("SELECT DISTINCT to_char(date, 'YYYY-MM') as month_str FROM receipts ORDER BY month_str DESC");
+    const result = await pool.query("SELECT DISTINCT to_char(date, 'YYYY-MM') as month_str FROM dp_receipts ORDER BY month_str DESC");
     res.json(result.rows.map(r => r.month_str));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Save Receipt + Auto Cleanup
+// Save DP Receipt
 router.post('/', async (req, res) => {
   let { date, customer_name, amount, payment_mode, hp_financier, model } = req.body;
-  
-  // Handle empty amount to prevent DB crash
-  if (amount === '' || amount === undefined || amount === null) {
-      amount = 0;
-  }
+  if (amount === '' || amount === undefined || amount === null) amount = 0;
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-
-    // 1. Insert Receipt
     const result = await client.query(
-      `INSERT INTO receipts 
+      `INSERT INTO dp_receipts 
       (date, customer_name, amount, payment_mode, hp_financier, model)
       VALUES ($1, $2, $3, $4, $5, $6) RETURNING receipt_no`,
       [date, customer_name, amount, payment_mode, hp_financier, model]
     );
-
-    // 2. Auto-Cleanup: Delete older than 45 days
-    await client.query("DELETE FROM receipts WHERE date < NOW() - INTERVAL '45 days'");
-
+    await client.query("DELETE FROM dp_receipts WHERE date < NOW() - INTERVAL '45 days'");
     await client.query('COMMIT');
     res.json({ success: true, receiptNo: result.rows[0].receipt_no });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error("Receipt Save Error:", err);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
   }
 });
 
-// List History (with optional month filter)
+// NEW: Update Existing DP Receipt
+router.put('/:receipt_no', async (req, res) => {
+  const { receipt_no } = req.params;
+  const { date, customer_name, amount, payment_mode, hp_financier, model } = req.body;
+
+  try {
+    await pool.query(
+      `UPDATE dp_receipts SET 
+        date = $1, customer_name = $2, amount = $3, payment_mode = $4, hp_financier = $5, model = $6
+      WHERE receipt_no = $7`,
+      [date, customer_name, amount, payment_mode, hp_financier, model, receipt_no]
+    );
+    res.json({ success: true, message: "Receipt updated" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// List History
 router.get('/list', async (req, res) => {
   try {
     const { month } = req.query;
-    let query = "SELECT * FROM receipts";
+    let query = "SELECT * FROM dp_receipts";
     let params = [];
 
     if (month) {
-      // Filter by specific month (Postgres syntax)
       query += " WHERE to_char(date, 'YYYY-MM') = $1 ORDER BY receipt_no DESC";
       params.push(month);
     } else {
-      // Default view (Last 500)
       query += " ORDER BY receipt_no DESC LIMIT 500";
     }
 
@@ -82,4 +88,4 @@ router.get('/list', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
