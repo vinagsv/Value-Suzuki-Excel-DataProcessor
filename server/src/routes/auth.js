@@ -20,11 +20,11 @@ router.post('/login', async (req, res) => {
       { expiresIn: '12h' }
     );
 
-    // Set HttpOnly Cookie
+    // Set HttpOnly Cookie with Cross-Site settings for Production
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production', // true in production (HTTPS)
-      sameSite: 'strict',
+      secure: true,       // Required for SameSite="None"
+      sameSite: 'none',   // Allows cross-site cookie usage
       maxAge: 12 * 60 * 60 * 1000 // 12 hours
     });
 
@@ -36,7 +36,11 @@ router.post('/login', async (req, res) => {
 
 // Logout to clear cookie
 router.post('/logout', (req, res) => {
-  res.clearCookie('token');
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none'
+  });
   res.json({ message: 'Logged out' });
 });
 
