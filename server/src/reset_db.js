@@ -5,17 +5,10 @@ import bcrypt from 'bcryptjs';
 dotenv.config();
 
 const { Pool } = pg;
-
-// Environment check
 const isProduction = process.env.NODE_ENV === 'production';
 
-const connectionString = process.env.DATABASE_URL 
-  ? process.env.DATABASE_URL 
-  : `postgresql://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`;
-
 const pool = new Pool({
-  connectionString,
-  // LOGIC: Enable SSL only in production, disable locally to prevent "server does not support SSL" errors
+  connectionString: process.env.DATABASE_URL,
   ssl: isProduction ? { rejectUnauthorized: false } : false
 });
 
@@ -23,59 +16,49 @@ const fullReset = async () => {
   const client = await pool.connect();
   
   try {
-    console.log(`🚨 STARTING DATABASE RESET (Environment: ${isProduction ? 'Production' : 'Local'})...`);
-    console.log('⚠️  All existing data will be lost.');
-    
+    console.log(`🚨 STARTING DATABASE RESET...`);
     await client.query('BEGIN');
 
     // 1. DROP ALL TABLES
-    const tables = [
-      'users',
-      'general_receipts',
-      'dp_receipts',
-      'gate_passes',
-      'form22_vehicles',
-      'attendance_storage'
-    ];
-
+    const tables = ['users', 'general_receipts', 'dp_receipts', 'gate_passes', 'form22_vehicles', 'attendance_storage'];
     for (const table of tables) {
       await client.query(`DROP TABLE IF EXISTS ${table} CASCADE`);
-      console.log(`🗑️  Dropped table: ${table}`);
     }
 
     // 2. RE-CREATE TABLES
     
-    // Users
+    // Users (Added Email)
     await client.query(`
       CREATE TABLE users (
         id SERIAL PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
+        username VARCHAR(50) NOT NULL,
+        email VARCHAR(100) UNIQUE NOT NULL, 
         password_hash TEXT NOT NULL,
         role VARCHAR(20) DEFAULT 'user',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('✅ Created table: users');
 
-    // General Receipts
+    // General Receipts 
     await client.query(`
       CREATE TABLE general_receipts (
         receipt_no BIGINT PRIMARY KEY,
+        financial_year VARCHAR(10), 
         date DATE NOT NULL,
         customer_name TEXT NOT NULL,
         mobile TEXT,
         gst_no TEXT,
-        file_no TEXT,
+        file_no TEXT, 
         hp_financier TEXT,
         model TEXT,
         amount NUMERIC(12, 2) NOT NULL,
         payment_type TEXT,
         payment_mode TEXT,
         payment_date DATE,
+        cheque_no TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('✅ Created table: general_receipts');
 
     // DP Receipts
     await client.query(`
@@ -91,7 +74,6 @@ const fullReset = async () => {
       );
     `);
     await client.query("ALTER SEQUENCE dp_receipts_receipt_no_seq RESTART WITH 712");
-    console.log('✅ Created table: dp_receipts');
 
     // Gate Passes
     await client.query(`
@@ -111,7 +93,6 @@ const fullReset = async () => {
       );
     `);
     await client.query("ALTER SEQUENCE gate_passes_pass_no_seq RESTART WITH 1000");
-    console.log('✅ Created table: gate_passes');
 
     // Form 22 Vehicles
     await client.query(`
@@ -123,7 +104,6 @@ const fullReset = async () => {
         color TEXT
       );
     `);
-    console.log('✅ Created table: form22_vehicles');
 
     // Attendance Storage
     await client.query(`
@@ -136,23 +116,9 @@ const fullReset = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('✅ Created table: attendance_storage');
-
-    // 3. SEED DATA
-    const salt = await bcrypt.genSalt(10);
-    
-    // Admin
-    const adminHash = await bcrypt.hash('admin123', salt);
-    await client.query("INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)", ['admin', adminHash, 'admin']);
-    console.log('👤 Created Admin: username="admin" password="admin123"');
-
-    // User
-    const userHash = await bcrypt.hash('user123', salt);
-    await client.query("INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)", ['user', userHash, 'user']);
-    console.log('👤 Created User: username="user" password="user123"');
 
     await client.query('COMMIT');
-    console.log('\n🎉 RESET COMPLETE! Database is ready.');
+    console.log('✅ DATABASE RESET COMPLETE.');
     
   } catch (err) {
     await client.query('ROLLBACK');

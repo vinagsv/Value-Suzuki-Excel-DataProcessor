@@ -1,11 +1,12 @@
 import React from "react";
-import { Moon, Sun, LogOut } from "lucide-react";
+import { Moon, Sun, LogOut, UserCircle } from "lucide-react"; // Import UserCircle
 
-const Navbar = ({ activePage, setActivePage, theme, toggleTheme, onLogout }) => {
+const Navbar = ({ activePage, setActivePage, theme, toggleTheme, onLogout, userRole }) => {
   const isDark = theme === "dark";
 
   const pages = [
     { id: "receipt", name: "Receipt" },
+    { id: "verify", name: "Verify" },
     { id: "gatepass", name: "Gate Pass" },
     { id: "dp_receipt", name: "DP Receipt" },
     { id: "vahan", name: "VAHAN" },
@@ -48,6 +49,22 @@ const Navbar = ({ activePage, setActivePage, theme, toggleTheme, onLogout }) => 
 
       {/* Right Side Actions */}
       <div className="flex items-center gap-3">
+        
+        {/* NEW: Profile Button */}
+        <button
+          onClick={() => setActivePage("profile")}
+          className={`p-2 rounded-lg transition-all duration-300 ${
+            activePage === "profile"
+                ? "bg-blue-100 text-blue-600 border border-blue-200"
+                : isDark
+                    ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
+                    : "bg-gray-100 hover:bg-gray-200 text-gray-600"
+          }`}
+          title="Account Settings"
+        >
+          <UserCircle size={20} />
+        </button>
+
         {/* Theme Toggle */}
         <button
           onClick={toggleTheme}

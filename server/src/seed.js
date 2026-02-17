@@ -1,6 +1,10 @@
-require('dotenv').config(); // Load environment variables
-const { Pool } = require('pg');
-const bcrypt = require('bcryptjs');
+import dotenv from 'dotenv';
+import pg from 'pg';
+import bcrypt from 'bcryptjs';
+
+dotenv.config();
+
+const { Pool } = pg;
 
 // Database Connection
 const connectionString = process.env.DATABASE_URL 
@@ -9,7 +13,7 @@ const connectionString = process.env.DATABASE_URL
 
 const pool = new Pool({
   connectionString,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 const seedDatabase = async () => {
@@ -20,11 +24,11 @@ const seedDatabase = async () => {
     await client.query('BEGIN');
 
     // 1. Create Users Table (Safe creation: IF NOT EXISTS)
-    // This ensures we don't drop the table if it already has users
     const createTableQuery = `
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
+        username VARCHAR(50) NOT NULL,
+        email VARCHAR(100) UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
         role VARCHAR(20) DEFAULT 'user',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -34,35 +38,34 @@ const seedDatabase = async () => {
     console.log('✅ Users table checked/created.');
 
     // 2. Check if Admin Exists
-    const checkAdmin = await client.query("SELECT * FROM users WHERE username = 'admin'");
+    const checkAdmin = await client.query("SELECT * FROM users WHERE email = 'admin@valuesuzuki.com'");
     
     if (checkAdmin.rows.length === 0) {
       // 3. Create Admin User
-      // Password: 'admin123'
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash('admin123', salt);
 
       const insertAdminQuery = `
-        INSERT INTO users (username, password_hash, role) 
-        VALUES ($1, $2, $3)
+        INSERT INTO users (username, email, password_hash, role) 
+        VALUES ($1, $2, $3, $4)
       `;
-      await client.query(insertAdminQuery, ['admin', hashedPassword, 'admin']);
-      console.log('✅ Default Admin user created (User: admin / Pass: admin123)');
+      await client.query(insertAdminQuery, ['Admin User', 'admin@valuesuzuki.com', hashedPassword, 'admin']);
+      console.log('✅ Default Admin created: admin@valuesuzuki.com / admin123');
     } else {
-      console.log('ℹ️  Admin user already exists. Skipping creation.');
+      console.log('ℹ️  Admin user already exists. Skipping.');
     }
 
-    // 4. (Optional) Create a standard 'user' for testing
-    const checkUser = await client.query("SELECT * FROM users WHERE username = 'user'");
+    // 4. Check if Standard User Exists
+    const checkUser = await client.query("SELECT * FROM users WHERE email = 'user@valuesuzuki.com'");
     if (checkUser.rows.length === 0) {
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash('user123', salt);
       
       await client.query(
-        "INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)", 
-        ['user', hashedPassword, 'user']
+        "INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, $4)", 
+        ['Staff User', 'user@valuesuzuki.com', hashedPassword, 'user']
       );
-      console.log('✅ Default Standard user created (User: user / Pass: user123)');
+      console.log('✅ Default User created: user@valuesuzuki.com / user123');
     }
 
     await client.query('COMMIT');
@@ -73,7 +76,7 @@ const seedDatabase = async () => {
     console.error('❌ Seeding failed:', err);
   } finally {
     client.release();
-    pool.end();
+    await pool.end();
   }
 };
 

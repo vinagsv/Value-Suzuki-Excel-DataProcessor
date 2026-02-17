@@ -7,14 +7,30 @@ import InfoPage from "./InfoPage";
 import AttendanceApp from "./AttendanceApp";
 import SuzukiGatePass from "./SuzukiGatePass";
 import DpReceipt from "./DpReceipt";
-import Receipt from "./components/Receipt"; // Back to the placeholder
+import Receipt from "./components/Receipt"; 
+import Verify from "./ReqFetch/Verify";
+import UserProfile from "./components/UserProfile"
 
+// --- GLOBAL FETCH INTERCEPTOR ---
 const originalFetch = window.fetch;
 window.fetch = async (...args) => {
   let [resource, config] = args;
   config = config || {};
   config.credentials = 'include';
-  return originalFetch(resource, config);
+  
+  try {
+    const response = await originalFetch(resource, config);
+    
+    // Check for Session Expiry (401 Unauthorized)
+    if (response.status === 401) {
+      // Dispatch a custom event that App component listens to
+      window.dispatchEvent(new Event('auth:session-expired'));
+    }
+    
+    return response;
+  } catch (error) {
+    throw error;
+  }
 };
 
 function App() {
@@ -34,6 +50,9 @@ function App() {
     return localStorage.getItem("activePage") || "gatepass";
   });
 
+  // State to pass message to Login screen
+  const [loginMessage, setLoginMessage] = useState("");
+
   const isDark = theme === "dark";
 
   useEffect(() => {
@@ -44,14 +63,37 @@ function App() {
     localStorage.setItem("activePage", activePage);
   }, [activePage]);
 
+  // --- LISTENER FOR SESSION EXPIRY ---
+  useEffect(() => {
+    const handleSessionExpiry = () => {
+      // Only trigger if we are currently logged in to avoid loops
+      if (localStorage.getItem("isLoggedIn") === "true") {
+        console.warn("Session expired. Logging out...");
+        localStorage.removeItem("isLoggedIn");
+        localStorage.removeItem("userRole");
+        setUserRole("user");
+        setLoginMessage("Your session has expired. Please log in again.");
+        setIsAuthenticated(false);
+      }
+    };
+
+    window.addEventListener('auth:session-expired', handleSessionExpiry);
+
+    // Cleanup listener
+    return () => window.removeEventListener('auth:session-expired', handleSessionExpiry);
+  }, []);
+
   const toggleTheme = () => {
     setTheme(isDark ? "light" : "dark");
   };
 
-  const handleLogin = (role) => {
+  const handleLogin = (role, email) => {
     localStorage.setItem("isLoggedIn", "true");
     localStorage.setItem("userRole", role);
+    if(email) localStorage.setItem("userEmail", email);
+    
     setUserRole(role);
+    setLoginMessage(""); // Clear any previous error messages
     setIsAuthenticated(true);
   };
 
@@ -63,13 +105,15 @@ function App() {
     } finally {
       localStorage.removeItem("isLoggedIn");
       localStorage.removeItem("userRole");
+      setLoginMessage(""); // No error message for voluntary logout
       setIsAuthenticated(false);
       setUserRole("user");
     }
   };
 
   if (!isAuthenticated) {
-    return <Login onLogin={handleLogin} />;
+    // Pass the session expired message to Login component
+    return <Login onLogin={handleLogin} initialError={loginMessage} />;
   }
 
   return (
@@ -90,13 +134,15 @@ function App() {
       />
 
       <div className="pt-20 pb-10">
+        {activePage === "receipt" && <Receipt theme={theme} />} 
+        {activePage === "verify" && <Verify theme={theme} />}
         {activePage === "gatepass" && <SuzukiGatePass theme={theme} />}
         {activePage === "dp_receipt" && <DpReceipt theme={theme} />}
-        {activePage === "receipt" && <Receipt theme={theme} />} 
         {activePage === "vahan" && <VahanConverter theme={theme} />}
         {activePage === "dms" && <DMSNames theme={theme} />}
         {activePage === "attendance" && <AttendanceApp theme={theme} />}
         {activePage === "info" && <InfoPage theme={theme} />}
+        {activePage === "profile" && <UserProfile theme={theme} />}
       </div>
     </div>
   );

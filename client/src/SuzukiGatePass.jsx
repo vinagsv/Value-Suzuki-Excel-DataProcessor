@@ -62,7 +62,7 @@ const SuzukiGatePass = ({ theme }) => {
       const res = await fetch(`${API_URL}/gatepass/list`);
       if (!res.ok) {
         setHistory([]); 
-        setServerError(true);
+        setServerError(true); 
         return;
       }
       const data = await res.json();
@@ -71,7 +71,7 @@ const SuzukiGatePass = ({ theme }) => {
     } catch (err) { 
       console.error("History fetch error:", err);
       setHistory([]); 
-      setServerError(true);
+      setServerError(true); 
     }
   };
 
@@ -240,59 +240,61 @@ const SuzukiGatePass = ({ theme }) => {
   };
 
   const hasValue = (val) => val && val.trim().length > 0;
-  const inputClass = `w-full p-2 rounded border text-sm ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"} focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed`;
-  const labelClass = `block text-xs font-bold uppercase mb-1 ${isDark ? "text-gray-400" : "text-gray-600"}`;
+
+  // COMPACT STYLES FOR THE FORM
+  const inputClass = `w-full p-1.5 rounded border text-sm ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"} focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed`;
+  const labelClass = `block text-[10px] font-bold uppercase mb-0.5 ${isDark ? "text-gray-400" : "text-gray-600"}`;
   const tableHeaderClass = `px-4 py-2 text-left text-xs font-semibold ${isDark ? "text-gray-300 bg-gray-700" : "text-gray-600 bg-gray-100"}`;
   const tableRowClass = `border-b ${isDark ? "border-gray-700 hover:bg-gray-700/50" : "border-gray-100 hover:bg-gray-50"} transition-colors`;
 
   return (
-    <div className="container mx-auto p-4 md:p-6 max-w-7xl">
-      <div className="flex flex-col lg:flex-row gap-8 mb-12">
-        <div className={`w-full lg:w-1/3 p-5 rounded-xl shadow-lg h-fit ${isDark ? "bg-gray-800 border border-gray-700" : "bg-white border border-gray-100"}`}>
+    <div className="container mx-auto p-2 md:p-4 max-w-7xl">
+      <div className="flex flex-col lg:flex-row gap-4 mb-8">
+        
+        {/* COMPACT FORM PANEL */}
+        <div className={`w-full lg:w-1/3 p-4 rounded-xl shadow-lg h-fit ${isDark ? "bg-gray-800 border border-gray-700" : "bg-white border border-gray-100"}`}>
           
-          {/* OFFLINE BANNER */}
           {serverError && (
-            <div className="mb-4 bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded shadow-md animate-pulse">
+            <div className="mb-3 bg-red-100 border-l-4 border-red-500 text-red-700 p-2 rounded shadow-sm animate-pulse">
               <div className="flex items-center gap-2">
-                <WifiOff size={20} />
-                <p className="font-bold">System Offline</p>
+                <WifiOff size={16} />
+                <p className="font-bold text-xs">System Offline</p>
               </div>
-              <p className="text-xs mt-1">Server connection failed. Data entry is disabled.</p>
             </div>
           )}
 
-          <div className="flex items-center justify-between mb-4">
-            <h2 className={`text-lg font-bold ${isDark ? "text-white" : "text-gray-800"}`}>
-                {isEditing ? "📝 Edit Gate Pass" : "Gate Pass Details"}
+          <div className="flex items-center justify-between mb-3 border-b pb-2">
+            <h2 className={`text-base font-bold ${isDark ? "text-white" : "text-gray-800"}`}>
+                {isEditing ? "Edit Gate Pass" : "Gate Pass Details"}
             </h2>
             <div className="flex gap-2">
                 {isEditing && (
-                    <button onClick={cancelEdit} className="text-red-500 hover:text-red-700 flex items-center gap-1 text-xs font-bold uppercase">
-                        <XCircle size={16} /> Cancel Edit
+                    <button onClick={cancelEdit} className="text-red-500 hover:text-red-700 flex items-center gap-1 text-[10px] font-bold uppercase">
+                        <XCircle size={14} /> Cancel
                     </button>
                 )}
                 {!serverError && (
-                  <button onClick={fetchNextPassNo} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition"><RefreshCw size={16} /></button>
+                  <button onClick={fetchNextPassNo} className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition"><RefreshCw size={14} /></button>
                 )}
             </div>
           </div>
 
-          <fieldset disabled={serverError} className="space-y-3">
-             <div className="mb-4 relative">
-                 <label className={labelClass}>Search Form 22 (Chassis / Name)</label>
+          <fieldset disabled={serverError} className="space-y-2">
+             <div className="mb-3 relative">
+                 <label className={labelClass}>Vehicle Search (Chassis/Name)</label>
                  <div className="relative">
-                    <input value={searchQuery} onChange={handleSearchInput} className={`${inputClass} pl-8`} placeholder="Enter Chassis No..." />
-                    <Search className="absolute left-2.5 top-2.5 text-gray-400" size={14} />
-                    {isSearching && <div className="absolute right-2.5 top-2.5 animate-spin h-4 w-4 border-2 border-blue-500 rounded-full border-t-transparent"></div>}
+                    <input value={searchQuery} onChange={handleSearchInput} className={`${inputClass} pl-8`} placeholder="Enter last 4 digits..." />
+                    <Search className="absolute left-2.5 top-2 text-gray-400" size={14} />
+                    {isSearching && <div className="absolute right-2.5 top-2 animate-spin h-3 w-3 border-2 border-blue-500 rounded-full border-t-transparent"></div>}
                  </div>
                  {searchResults.length > 0 && (
-                     <div className="absolute z-50 w-full bg-white border border-gray-300 shadow-xl rounded-lg mt-1 max-h-60 overflow-y-auto">
+                     <div className="absolute z-50 w-full bg-white border border-gray-300 shadow-xl rounded-lg mt-1 max-h-48 overflow-y-auto">
                          {searchResults.map((vh, idx) => (
-                             <div key={vh.id || idx} onClick={() => selectVehicle(vh)} className="p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0">
-                                 <div className="font-bold text-gray-800">{vh.chassis_no}</div>
-                                 <div className="text-xs text-gray-500 flex justify-between">
-                                    <span>{vh.customer_name}</span>
-                                    <span className="text-blue-600 font-semibold">{vh.model}</span>
+                             <div key={vh.id || idx} onClick={() => selectVehicle(vh)} className="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0">
+                                 <div className="font-bold text-xs text-gray-800">{vh.chassis_no}</div>
+                                 <div className="text-[10px] text-gray-500 flex justify-between">
+                                   <span>{vh.customer_name}</span>
+                                   <span className="text-blue-600 font-semibold">{vh.model}</span>
                                  </div>
                              </div>
                          ))}
@@ -300,26 +302,26 @@ const SuzukiGatePass = ({ theme }) => {
                  )}
              </div>
           
-             <div className="grid grid-cols-2 gap-3">
+             <div className="grid grid-cols-2 gap-2">
                <div><label className={labelClass}>Pass No</label><input name="passNo" value={formData.passNo} readOnly className={`${inputClass} opacity-70`} /></div>
                <div><label className={labelClass}>Date</label><input type="date" name="date" value={formData.date} onChange={handleChange} className={inputClass} /></div>
              </div>
              <div><label className={labelClass}>Customer Name</label><input name="customerName" value={formData.customerName} onChange={handleChange} className={inputClass} /></div>
-             <div className="grid grid-cols-2 gap-3">
+             <div className="grid grid-cols-2 gap-2">
                <div><label className={labelClass}>Model</label><input name="model" value={formData.model} onChange={handleChange} className={inputClass} /></div>
                <div><label className={labelClass}>Color</label><input name="color" value={formData.color} onChange={handleChange} className={inputClass} /></div>
              </div>
-             <div className="grid grid-cols-2 gap-3">
+             <div className="grid grid-cols-2 gap-2">
                <div><label className={labelClass}>Regn No</label><input name="regnNo" value={formData.regnNo} onChange={handleChange} className={inputClass} /></div>
                <div><label className={labelClass}>Chassis No</label><input name="chassisNo" value={formData.chassisNo} onChange={handleChange} className={inputClass} /></div>
              </div>
-             <hr className="my-2 border-gray-300" />
-             <div className="grid grid-cols-1 gap-3">
-               <div><label className={labelClass}>Sales Bill No</label><input name="salesBillNo" value={formData.salesBillNo} onChange={handleChange} className={inputClass} /></div>
-               <div><label className={labelClass}>Spares Bill No</label><input name="sparesBillNo" value={formData.sparesBillNo} onChange={handleChange} className={inputClass} /></div>
-               <div><label className={labelClass}>Service Bill No</label><input name="serviceBillNo" value={formData.serviceBillNo} onChange={handleChange} className={inputClass} /></div>
+             <hr className="my-1 border-gray-200" />
+             <div className="grid grid-cols-3 gap-2">
+               <div><label className={labelClass}>Sales Bill</label><input name="salesBillNo" value={formData.salesBillNo} onChange={handleChange} className={inputClass} /></div>
+               <div><label className={labelClass}>Spares Bill</label><input name="sparesBillNo" value={formData.sparesBillNo} onChange={handleChange} className={inputClass} /></div>
+               <div><label className={labelClass}>Service Bill</label><input name="serviceBillNo" value={formData.serviceBillNo} onChange={handleChange} className={inputClass} /></div>
              </div>
-             <div className="mt-2">
+             <div>
                 <label className={labelClass}>Narration / Remarks</label>
                 <input name="narration" value={formData.narration} onChange={handleChange} className={inputClass} placeholder="Enter remarks..." />
              </div>
@@ -327,23 +329,24 @@ const SuzukiGatePass = ({ theme }) => {
              <button 
                 onClick={handlePrint} 
                 disabled={serverError}
-                className={`w-full mt-4 font-bold py-3 px-4 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all ${
+                className={`w-full mt-2 font-bold py-2 px-4 rounded-lg shadow-md flex items-center justify-center gap-2 transition-all ${
                   serverError 
                    ? "bg-gray-400 cursor-not-allowed text-gray-200"
                    : (isEditing ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-green-600 hover:bg-green-700 text-white")
                 }`}
              >
-               {serverError ? <WifiOff size={20} /> : <Printer size={20} />}
-               {serverError ? "System Offline" : (isEditing ? "Update & Print" : "Save & Print")}
+               {serverError ? <WifiOff size={18} /> : <Printer size={18} />}
+               {serverError ? "Offline" : (isEditing ? "Update & Print" : "Save & Print")}
              </button>
           </fieldset>
         </div>
 
+        {/* PRINT PREVIEW PANEL */}
         <div className={`w-full lg:w-2/3 rounded-xl p-4 overflow-auto flex justify-center items-start ${isDark ? "bg-gray-700/50" : "bg-gray-200"}`}>
              <style type="text/css" media="print">
                {` @page { size: auto; margin: 0mm; } html, body { margin: 0; padding: 0; background: white; width: 100%; height: 100%; } .print-container { width: 100% !important; height: 148.5mm !important; position: relative; padding-left: ${LAYOUT.paddingX} !important; padding-right: ${LAYOUT.paddingX} !important; padding-top: ${LAYOUT.paddingY} !important; overflow: hidden; } `}
              </style>
-             <div className="transform scale-[0.8] lg:scale-100 origin-top bg-white shadow-2xl">
+             <div className="transform scale-[0.7] lg:scale-90 origin-top bg-white shadow-2xl">
                 <div ref={componentRef} className="print-container text-black font-sans relative flex flex-col" style={{ width: '210mm', height: LAYOUT.height, paddingLeft: LAYOUT.paddingX, paddingRight: LAYOUT.paddingX, paddingTop: LAYOUT.paddingY, backgroundColor: 'white' }}>
                    <div className="flex justify-between items-start mb-1">
                        <div className="w-[45%]"><img src="/suzuki-logo.png" alt="Suzuki" style={{width:'220px'}} onError={(e)=>{e.target.style.display='none'}}/></div>
@@ -371,9 +374,11 @@ const SuzukiGatePass = ({ theme }) => {
                        {hasValue(formData.narration) && <div className="flex items-end w-full mt-2"><span className="font-bold mr-2 uppercase w-32 shrink-0">Narration:</span><span className="border-b border-dotted border-black flex-grow px-2 font-medium text-sm uppercase">{formData.narration}</span></div>}
                    </div>
 
-                   <div className="mt-[80px] flex justify-end">
+                   {/* DYNAMIC SIGNATORY SECTION - NO mt-auto */}
+                   <div className="mt-8 flex justify-end">
                        <div className="text-center">
-                           <div className="border-t border-black px-6 pt-1 text-xs font-bold">Authorised Signatory</div>
+                           <div className="text-[10px] font-bold mb-8">For VALUE MOTOR AGENCY PVT LTD</div>
+                           <div className="border-t border-black px-6 pt-1 text-[10px] font-bold">Authorised Signatory</div>
                        </div>
                    </div>
                 </div>
@@ -383,7 +388,7 @@ const SuzukiGatePass = ({ theme }) => {
 
       <div className={`rounded-xl shadow-lg p-6 ${isDark ? "bg-gray-800 border border-gray-700" : "bg-white border border-gray-100"}`}>
         <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
-            <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-800"}`}>History (Click row to Edit/Reprint)</h2>
+            <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-800"}`}>History</h2>
             <div className="flex gap-2 items-center flex-wrap">
                 <input value={historySearchTerm} onChange={(e) => setHistorySearchTerm(e.target.value)} className={`${inputClass} w-48`} placeholder="Search displayed..." />
                 <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg border border-gray-300">
