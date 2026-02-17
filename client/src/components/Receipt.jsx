@@ -570,10 +570,10 @@ const Receipt = ({ theme }) => {
       <DaySummaryModal isOpen={showSummary} onClose={() => setShowSummary(false)} />
 
       {/* Main Layout */}
-      <div className="flex flex-col xl:flex-row gap-4 mb-8">
+      <div className="flex flex-col lg:flex-row gap-4 mb-8">
         
         {/* LEFT PANEL: Form */}
-        <div className={`w-full xl:w-1/3 p-4 rounded-xl shadow-lg h-fit ${isDark ? "bg-gray-800 border border-gray-700" : "bg-white border border-gray-100"}`}>
+        <div className={`w-full lg:w-[380px] lg:flex-shrink-0 p-4 rounded-xl shadow-lg h-fit ${isDark ? "bg-gray-800 border border-gray-700" : "bg-white border border-gray-100"}`}>
           
           {serverError && (
             <div className="mb-4 bg-red-100 border-l-4 border-red-500 text-red-700 p-2 rounded shadow-md animate-pulse">
@@ -696,7 +696,7 @@ const Receipt = ({ theme }) => {
         </div>
 
         {/* RIGHT PANEL: Preview */}
-        <div className={`w-full xl:w-2/3 rounded-xl p-6 overflow-x-auto flex justify-center items-start ${isDark ? "bg-gray-700/50" : "bg-gray-200"}`}>
+        <div className={`w-full lg:flex-1 rounded-xl p-6 overflow-x-auto flex justify-center items-start ${isDark ? "bg-gray-700/50" : "bg-gray-200"}`}>
 
           {/* ── Print Styles ── */}
           <style type="text/css" media="print">
