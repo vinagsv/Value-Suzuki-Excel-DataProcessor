@@ -566,7 +566,7 @@ const Verify = ({ theme }) => {
   const [calcHistory, setCalcHistory] = useState("");
   const calcInputRef = useRef(null);
 
-  const REQ_API_URL = import.meta.env.VITE_REQ_API_URL || "http://localhost:5000/api";
+  const REQ_API_URL = import.meta.env.VITE_REQ_API_URL;
   const LOCAL_API_URL = import.meta.env.VITE_API_URL;
 
   // On mount, check if we have a saved token, but don't assume connection is valid forever
@@ -578,25 +578,43 @@ const Verify = ({ theme }) => {
     }
   }, []);
 
-  const handleConnect = async () => {
+ const handleConnect = async () => {
+    console.log("Attempting to connect...");
     setConnectionStatus("connecting");
+    
+    // 1. CHECK CREDENTIALS
     const email = sessionStorage.getItem("userEmail");
     const password = sessionStorage.getItem("userPassword");
     
+    console.log("Credentials found:", { email: !!email, password: !!password });
+
+
     if (!email || !password) { 
+        console.error("Missing credentials in SessionStorage");
+        alert("No credentials found. Please login to the main app first.");
         setConnectionStatus("error"); 
         return; 
     }
 
     try {
+      console.log(`Sending login request to: ${REQ_API_URL}/auth/login`);
+      
       const response = await fetch(`${REQ_API_URL}/auth/login`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", 
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password })
       });
       
-      if (!response.ok) throw new Error("Auth failed");
+      console.log("Response status:", response.status);
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Auth failed: ${response.status} - ${errText}`);
+      }
 
       const resData = await response.json();
+      console.log("Login success data:", resData);
+
       if (resData.success) {
         const token = resData.data?.accessToken || resData.token;
         if (token) { 
@@ -604,12 +622,15 @@ const Verify = ({ theme }) => {
             sessionStorage.setItem("rmsToken", token); 
             setConnectionStatus("connected"); 
         } else {
+            console.error("No token in response");
             setConnectionStatus("error");
         }
       } else {
-          setConnectionStatus("error");
+        console.error("API returned success: false");
+        setConnectionStatus("error");
       }
-    } catch { 
+    } catch (error) { 
+        console.error("Connection Error Catch:", error);
         setConnectionStatus("error"); 
     }
   };
