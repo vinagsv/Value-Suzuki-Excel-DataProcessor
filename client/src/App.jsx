@@ -9,9 +9,9 @@ import SuzukiGatePass from "./SuzukiGatePass";
 import DpReceipt from "./DpReceipt";
 import Receipt from "./components/Receipt"; 
 import Verify from "./ReqFetch/Verify";
-import UserProfile from "./components/UserProfile"
+import UserProfile from "./components/UserProfile";
+import AdminPanel from "./components/AdminPanel"; 
 
-// --- GLOBAL FETCH INTERCEPTOR ---
 const originalFetch = window.fetch;
 window.fetch = async (...args) => {
   let [resource, config] = args;
@@ -20,13 +20,9 @@ window.fetch = async (...args) => {
   
   try {
     const response = await originalFetch(resource, config);
-    
-    // Check for Session Expiry (401 Unauthorized)
     if (response.status === 401) {
-      // Dispatch a custom event that App component listens to
       window.dispatchEvent(new Event('auth:session-expired'));
     }
-    
     return response;
   } catch (error) {
     throw error;
@@ -50,10 +46,21 @@ function App() {
     return localStorage.getItem("activePage") || "gatepass";
   });
 
-  // State to pass message to Login screen
   const [loginMessage, setLoginMessage] = useState("");
-
   const isDark = theme === "dark";
+
+  // --- GLOBAL TOAST SYSTEM ---
+  const [toasts, setToasts] = useState([]);
+  
+  useEffect(() => {
+    window.toast = (msg, type = 'info') => {
+        const id = Date.now() + Math.random();
+        setToasts(prev => [...prev, { id, msg, type }]);
+        setTimeout(() => {
+            setToasts(prev => prev.filter(t => t.id !== id));
+        }, 3000);
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("theme", theme);
@@ -63,12 +70,9 @@ function App() {
     localStorage.setItem("activePage", activePage);
   }, [activePage]);
 
-  // --- LISTENER FOR SESSION EXPIRY ---
   useEffect(() => {
     const handleSessionExpiry = () => {
-      // Only trigger if we are currently logged in to avoid loops
       if (localStorage.getItem("isLoggedIn") === "true") {
-        console.warn("Session expired. Logging out...");
         localStorage.removeItem("isLoggedIn");
         localStorage.removeItem("userRole");
         setUserRole("user");
@@ -76,16 +80,11 @@ function App() {
         setIsAuthenticated(false);
       }
     };
-
     window.addEventListener('auth:session-expired', handleSessionExpiry);
-
-    // Cleanup listener
     return () => window.removeEventListener('auth:session-expired', handleSessionExpiry);
   }, []);
 
-  const toggleTheme = () => {
-    setTheme(isDark ? "light" : "dark");
-  };
+  const toggleTheme = () => setTheme(isDark ? "light" : "dark");
 
   const handleLogin = (role, email) => {
     localStorage.setItem("isLoggedIn", "true");
@@ -93,7 +92,7 @@ function App() {
     if(email) localStorage.setItem("userEmail", email);
     
     setUserRole(role);
-    setLoginMessage(""); // Clear any previous error messages
+    setLoginMessage("");
     setIsAuthenticated(true);
   };
 
@@ -105,25 +104,29 @@ function App() {
     } finally {
       localStorage.removeItem("isLoggedIn");
       localStorage.removeItem("userRole");
-      setLoginMessage(""); // No error message for voluntary logout
+      setLoginMessage("");
       setIsAuthenticated(false);
       setUserRole("user");
     }
   };
 
   if (!isAuthenticated) {
-    // Pass the session expired message to Login component
     return <Login onLogin={handleLogin} initialError={loginMessage} />;
   }
 
   return (
-    <div
-      className={`min-h-screen transition-colors duration-300 ${
-        isDark
-          ? "bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900"
-          : "bg-gradient-to-br from-blue-50 via-white to-purple-50"
-      }`}
-    >
+    <div className={`min-h-screen transition-colors duration-300 ${isDark ? "bg-gray-900" : "bg-blue-50"}`}>
+      
+      {/* GLOBAL TOAST CONTAINER */}
+      <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none">
+          {toasts.map(t => (
+              <div key={t.id} className={`px-5 py-3 rounded-xl shadow-2xl text-sm font-bold text-white transition-all transform animate-fadeIn flex items-center gap-2 pointer-events-auto
+                  ${t.type === 'error' ? 'bg-red-600' : t.type === 'success' ? 'bg-green-600' : 'bg-blue-600'}`}>
+                  {t.msg}
+              </div>
+          ))}
+      </div>
+
       <Navbar 
         activePage={activePage} 
         setActivePage={setActivePage} 
@@ -143,6 +146,7 @@ function App() {
         {activePage === "attendance" && <AttendanceApp theme={theme} />}
         {activePage === "info" && <InfoPage theme={theme} />}
         {activePage === "profile" && <UserProfile theme={theme} />}
+        {activePage === "admin" && userRole === 'admin' && <AdminPanel theme={theme} />}
       </div>
     </div>
   );

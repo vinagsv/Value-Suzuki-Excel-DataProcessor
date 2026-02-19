@@ -1,5 +1,5 @@
 import React from "react";
-import { Moon, Sun, LogOut, UserCircle } from "lucide-react"; // Import UserCircle
+import { Moon, Sun, LogOut, UserCircle, Shield } from "lucide-react";
 
 const Navbar = ({ activePage, setActivePage, theme, toggleTheme, onLogout, userRole }) => {
   const isDark = theme === "dark";
@@ -16,14 +16,7 @@ const Navbar = ({ activePage, setActivePage, theme, toggleTheme, onLogout, userR
   ];
 
   return (
-    <nav
-      className={`fixed top-0 left-0 right-0 h-16 ${
-        isDark
-          ? "bg-gray-800/80 backdrop-blur-sm border-b border-gray-700"
-          : "bg-white/80 backdrop-blur-sm border-b border-gray-200"
-      } shadow-lg z-50 flex items-center justify-between px-6`}
-    >
-      {/* Navigation Items */}
+    <nav className={`fixed top-0 left-0 right-0 h-16 ${isDark ? "bg-gray-800/80 border-gray-700" : "bg-white/80 border-gray-200"} border-b backdrop-blur-sm shadow-lg z-50 flex items-center justify-between px-6`}>
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
         {pages.map((page) => {
           const isActive = activePage === page.id;
@@ -33,12 +26,8 @@ const Navbar = ({ activePage, setActivePage, theme, toggleTheme, onLogout, userR
               onClick={() => setActivePage(page.id)}
               className={`px-4 py-2 rounded-lg transition-all duration-300 font-medium whitespace-nowrap ${
                 isActive
-                  ? isDark
-                    ? "bg-blue-600 text-white shadow-lg shadow-blue-500/50"
-                    : "bg-blue-500 text-white shadow-lg shadow-blue-500/30"
-                  : isDark
-                  ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
-                  : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+                  ? "bg-blue-600 text-white shadow-lg"
+                  : isDark ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-100 text-gray-700"
               }`}
             >
               {page.name}
@@ -47,47 +36,25 @@ const Navbar = ({ activePage, setActivePage, theme, toggleTheme, onLogout, userR
         })}
       </div>
 
-      {/* Right Side Actions */}
       <div className="flex items-center gap-3">
-        
-        {/* NEW: Profile Button */}
-        <button
-          onClick={() => setActivePage("profile")}
-          className={`p-2 rounded-lg transition-all duration-300 ${
-            activePage === "profile"
-                ? "bg-blue-100 text-blue-600 border border-blue-200"
-                : isDark
-                    ? "bg-gray-700 hover:bg-gray-600 text-gray-300"
-                    : "bg-gray-100 hover:bg-gray-200 text-gray-600"
-          }`}
-          title="Account Settings"
-        >
+        {userRole === 'admin' && (
+            <button 
+                onClick={() => setActivePage("admin")}
+                className={`flex items-center gap-1 px-3 py-2 rounded-lg font-bold transition-all ${activePage === "admin" ? "bg-purple-600 text-white" : "text-purple-600 hover:bg-purple-50"}`}
+            >
+                <Shield size={18} /> Admin
+            </button>
+        )}
+
+        <button onClick={() => setActivePage("profile")} className={`p-2 rounded-lg ${activePage === "profile" ? "bg-blue-100 text-blue-600" : isDark ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-100 text-gray-600"}`}>
           <UserCircle size={20} />
         </button>
 
-        {/* Theme Toggle */}
-        <button
-          onClick={toggleTheme}
-          className={`p-2 rounded-lg transition-all duration-300 ${
-            isDark
-              ? "bg-gray-700 hover:bg-gray-600 text-yellow-400"
-              : "bg-gray-100 hover:bg-gray-200 text-gray-900"
-          }`}
-          title="Toggle Theme"
-        >
+        <button onClick={toggleTheme} className={`p-2 rounded-lg ${isDark ? "hover:bg-gray-700 text-yellow-400" : "hover:bg-gray-100 text-gray-900"}`}>
           {isDark ? <Sun size={20} /> : <Moon size={20} />}
         </button>
 
-        {/* Logout Button */}
-        <button
-            onClick={onLogout}
-            className={`p-2 rounded-lg transition-all duration-300 ${
-            isDark
-                ? "bg-red-900/50 hover:bg-red-800 text-red-200"
-                : "bg-red-100 hover:bg-red-200 text-red-700"
-            }`}
-            title="Logout"
-        >
+        <button onClick={onLogout} className={`p-2 rounded-lg ${isDark ? "hover:bg-red-900/50 text-red-200" : "hover:bg-red-100 text-red-700"}`}>
             <LogOut size={20} />
         </button>
       </div>

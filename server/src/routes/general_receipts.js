@@ -3,45 +3,51 @@ import { pool } from '../config/db.js';
 
 const router = express.Router();
 
-const getFyPrefix = () => {
-  const now = new Date();
-  const month = now.getMonth(); // 0-11
-  const year = now.getFullYear();
-  // If Jan-Mar, FY starts in previous year. Else current year.
-  const fy = month < 3 ? year - 1 : year; 
-  return String(fy).slice(-2);
+// Helper: Get Financial Year YY (If Jan-Mar, returns Previous Year)
+const getFinancialYearYY = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = d.getMonth(); // 0 = Jan, 1 = Feb, 2 = Mar
+    return (month < 3 ? year - 1 : year).toString().slice(-2);
 };
 
-// Format raw file number to VMA format (252253 -> VMA2025/2253)
-const formatFileNumber = (raw) => {
-    if(!raw) return raw;
-    const clean = raw.toString().replace(/[^0-9]/g, '');
+// Helper: Get configured prefix and next sequence from DB safely
+const getFileConfig = async () => {
+  try {
+    const prefixRes = await pool.query("SELECT value FROM app_settings WHERE key = 'file_prefix'");
+    const rYearRes = await pool.query("SELECT value FROM app_settings WHERE key = 'receipt_year'");
+    const rSeqRes = await pool.query("SELECT value FROM app_settings WHERE key = 'receipt_seq'");
     
-    // Only format if it matches the pattern: 25xxxx (6 digits)
-    if (clean.length === 6) {
-        const prefix = clean.substring(0, 2); // e.g. 25
-        const suffix = clean.substring(2);    // e.g. 2253
-        return `VMA20${prefix}/${suffix}`;
-    }
-    return raw; // Return original if it doesn't match expected pattern
+    const prefix = prefixRes.rows[0]?.value || '';
+    const receiptYear = rYearRes.rows[0]?.value || '';
+    const receiptSeq = parseInt(rSeqRes.rows[0]?.value || '0', 10);
+
+    return { prefix, receiptYear, receiptSeq };
+  } catch (err) {
+    console.error("Settings fetch error:", err.message);
+    return { prefix: '', receiptYear: '', receiptSeq: 0 };
+  }
 };
 
-// 1. Get Next Receipt Number
+// 1. Get Next Numbers (Receipt No & File Prefix)
 router.get('/next', async (req, res) => {
   try {
-    const prefix = getFyPrefix();
-    const result = await pool.query(
-      "SELECT MAX(receipt_no) as max_no FROM general_receipts WHERE CAST(receipt_no AS TEXT) LIKE $1",
-      [`${prefix}%`]
-    );
-
-    let nextNo;
-    if (result.rows[0].max_no) {
-      nextNo = Number(result.rows[0].max_no) + 1;
-    } else {
-      nextNo = Number(`${prefix}00001`);
+    const config = await getFileConfig();
+    const currentYY = getFinancialYearYY();
+    
+    // Receipt Number Logic: YYXXXX. Auto resets to 1 if Financial Year changes.
+    let nextReceiptSeq = config.receiptSeq + 1;
+    if (config.receiptYear !== currentYY) {
+        nextReceiptSeq = 1; 
     }
-    res.json({ nextNo });
+
+    const paddedReceiptSeq = String(nextReceiptSeq).padStart(4, '0');
+    const nextReceiptNo = parseInt(`${currentYY}${paddedReceiptSeq}`, 10);
+
+    res.json({ 
+        nextReceiptNo, 
+        prefix: config.prefix
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -84,16 +90,18 @@ router.get('/day-summary', async (req, res) => {
     }
 });
 
-// 3. Customer Payment History 
+// 3. Customer Payment History
 router.get('/customer-history/:fileNo', async (req, res) => {
     const { fileNo } = req.params;
+    const decodedFileNo = decodeURIComponent(fileNo);
+
     try {
         const result = await pool.query(`
-            SELECT receipt_no, date, payment_type, amount, payment_mode, status
+            SELECT receipt_no, date, payment_type, amount, payment_mode, status, customer_name, model, hp_financier
             FROM general_receipts 
             WHERE file_no = $1 AND (status IS DISTINCT FROM 'CANCELLED')
             ORDER BY date DESC
-        `, [fileNo]);
+        `, [decodedFileNo]);
 
         const totalPaid = result.rows.reduce((sum, row) => sum + Number(row.amount), 0);
         
@@ -125,30 +133,45 @@ router.post('/', async (req, res) => {
   
   if (!status) status = 'ACTIVE';
 
-  // Format File Number
-  const formattedFileNo = formatFileNumber(file_no);
-
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const fy = getFyPrefix(); 
-
+    
+    // Insert Receipt
     await client.query(
       `INSERT INTO general_receipts 
-      (receipt_no, financial_year, date, customer_name, mobile, gst_no, file_no, hp_financier, model, amount, payment_type, payment_mode, payment_date, cheque_no, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-      [receipt_no, fy, date, customer_name, mobile, gst_no, formattedFileNo, hp_financier, model, amount, payment_type, payment_mode, payment_date, cheque_no, status]
+      (receipt_no, date, customer_name, mobile, gst_no, file_no, hp_financier, model, amount, payment_type, payment_mode, payment_date, cheque_no, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+      [receipt_no, date, customer_name, mobile, gst_no, file_no, hp_financier, model, amount, payment_type, payment_mode, payment_date, cheque_no, status]
     );
 
-    // Auto-Cleanup (Older than 2 years)
-    await client.query("DELETE FROM general_receipts WHERE date < NOW() - INTERVAL '2 years'");
+    try {
+      // INCREMENT RECEIPT SEQUENCE (YYXXXX format tracking based on Financial Year)
+      const currentYY = getFinancialYearYY();
+      const insertedSeqStr = String(receipt_no).slice(2);
+      const insertedSeq = parseInt(insertedSeqStr, 10);
+
+      await client.query(`
+        INSERT INTO app_settings (key, value) VALUES ('receipt_year', $1)
+        ON CONFLICT (key) DO UPDATE SET value = $1
+      `, [currentYY]);
+
+      await client.query(`
+        INSERT INTO app_settings (key, value) VALUES ('receipt_seq', $1)
+        ON CONFLICT (key) DO UPDATE SET value =
+            CASE WHEN EXCLUDED.value::int > COALESCE(app_settings.value, '0')::int THEN EXCLUDED.value ELSE app_settings.value END
+      `, [String(insertedSeq)]);
+
+    } catch (seqErr) {
+      console.warn("Skipping sequence update - table missing or failed.", seqErr.message);
+    }
 
     await client.query('COMMIT');
     res.json({ success: true, receiptNo: receipt_no });
   } catch (err) {
     await client.query('ROLLBACK');
     if (err.code === '23505') {
-        return res.status(409).json({ error: "Receipt number already exists. Please refresh." });
+        return res.status(409).json({ error: "Receipt number already exists." });
     }
     res.status(500).json({ error: err.message });
   } finally {
@@ -164,16 +187,13 @@ router.put('/:receipt_no', async (req, res) => {
     model, amount, payment_type, payment_mode, payment_date, cheque_no, status 
   } = req.body;
 
-  // Format File Number
-  const formattedFileNo = formatFileNumber(file_no);
-
   try {
     await pool.query(
       `UPDATE general_receipts SET 
         date = $1, customer_name = $2, mobile = $3, gst_no = $4, file_no = $5, hp_financier = $6, 
         model = $7, amount = $8, payment_type = $9, payment_mode = $10, payment_date = $11, cheque_no = $12, status = $13
       WHERE receipt_no = $14`,
-      [date, customer_name, mobile, gst_no, formattedFileNo, hp_financier, model, amount, payment_type, payment_mode, payment_date, cheque_no, status, receipt_no]
+      [date, customer_name, mobile, gst_no, file_no, hp_financier, model, amount, payment_type, payment_mode, payment_date, cheque_no, status, receipt_no]
     );
     res.json({ success: true, message: "Receipt updated" });
   } catch (err) {
@@ -181,7 +201,7 @@ router.put('/:receipt_no', async (req, res) => {
   }
 });
 
-// 7. List History
+// 7. List History / Search
 router.get('/list', async (req, res) => {
   const { month, search } = req.query;
   let query = "SELECT * FROM general_receipts";
@@ -191,13 +211,13 @@ router.get('/list', async (req, res) => {
     query += " WHERE to_char(date, 'YYYY-MM') = $1 ORDER BY receipt_no DESC";
     params.push(month);
   } else if (search) {
-     if (!isNaN(search) && search.length > 3) {
-         query += " WHERE file_no LIKE $1 OR CAST(receipt_no AS TEXT) LIKE $1 ORDER BY receipt_no DESC";
-         params.push(`%${search}%`);
-     } else {
-         query += " WHERE customer_name ILIKE $1 OR mobile LIKE $1 ORDER BY receipt_no DESC";
-         params.push(`%${search}%`);
-     }
+     query += ` WHERE 
+        file_no ILIKE $1 OR 
+        CAST(receipt_no AS TEXT) ILIKE $1 OR 
+        customer_name ILIKE $1 OR 
+        mobile ILIKE $1 
+        ORDER BY receipt_no DESC LIMIT 20`;
+     params.push(`%${search}%`);
   } else {
     query += " ORDER BY receipt_no DESC LIMIT 500";
   }

@@ -1,6 +1,5 @@
 import dotenv from 'dotenv';
 import pg from 'pg';
-import bcrypt from 'bcryptjs';
 
 dotenv.config();
 
@@ -16,18 +15,30 @@ const fullReset = async () => {
   const client = await pool.connect();
   
   try {
-    console.log(`🚨 STARTING DATABASE RESET...`);
+    console.log(`🚨 STARTING TOTAL DATABASE WIPE AND RESET...`);
     await client.query('BEGIN');
 
-    // 1. DROP ALL TABLES
-    const tables = ['users', 'general_receipts', 'dp_receipts', 'gate_passes', 'form22_vehicles', 'attendance_storage'];
+    // 1. DROP ALL TABLES (Nuclear Option for a totally fresh start)
+    const tables = [
+      'users', 
+      'general_receipts', 
+      'dp_receipts', 
+      'gate_passes', 
+      'form22_vehicles', 
+      'attendance_storage', 
+      'app_settings',
+      'price_list'
+    ];
+    
+    console.log(`🗑️  Dropping all existing tables...`);
     for (const table of tables) {
       await client.query(`DROP TABLE IF EXISTS ${table} CASCADE`);
     }
 
-    // 2. RE-CREATE TABLES
+    // 2. RE-CREATE ALL TABLES FROM SCRATCH
+    console.log(`🏗️  Rebuilding schema...`);
     
-    // Users (Added Email)
+    // Users
     await client.query(`
       CREATE TABLE users (
         id SERIAL PRIMARY KEY,
@@ -56,6 +67,7 @@ const fullReset = async () => {
         payment_mode TEXT,
         payment_date DATE,
         cheque_no TEXT,
+        status TEXT DEFAULT 'ACTIVE',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -117,8 +129,29 @@ const fullReset = async () => {
       );
     `);
 
+    // Settings
+    await client.query(`
+      CREATE TABLE app_settings (
+        key VARCHAR(50) PRIMARY KEY,
+        value TEXT
+      );
+    `);
+
+    // Price List
+    await client.query(`
+      CREATE TABLE price_list (
+        id SERIAL PRIMARY KEY,
+        model TEXT,
+        variant TEXT,
+        ex_showroom NUMERIC(12, 2),
+        insurance NUMERIC(12, 2),
+        rto NUMERIC(12, 2),
+        on_road NUMERIC(12, 2)
+      );
+    `);
+
     await client.query('COMMIT');
-    console.log('✅ DATABASE RESET COMPLETE.');
+    console.log('✅ DATABASE RESET COMPLETE. Schema is fresh.');
     
   } catch (err) {
     await client.query('ROLLBACK');

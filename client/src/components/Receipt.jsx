@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { ToWords } from 'to-words';
-import { Printer, RefreshCw, Edit3, XCircle, WifiOff, Calendar, X, Ban } from 'lucide-react';
+import { Printer, RefreshCw, Edit3, WifiOff, Calendar, Ban, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import DaySummary from './DaySummary';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -10,101 +11,6 @@ const toWords = new ToWords({
   localeCode: 'en-IN',
   converterOptions: { currency: false, ignoreDecimal: false, ignoreZeroCurrency: false, doNotAddOnly: true },
 });
-
-// --- Day Summary Modal ---
-const DaySummaryModal = ({ isOpen, onClose }) => {
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-    const [data, setData] = useState(null);
-    const [loading, setLoading] = useState(false);
-
-    const fetchSummary = async () => {
-        setLoading(true);
-        try {
-            const res = await fetch(`${API_URL}/general-receipts/day-summary?date=${date}`);
-            if(res.ok) setData(await res.json());
-        } catch(e) { console.error(e); }
-        finally { setLoading(false); }
-    };
-
-    useEffect(() => { if(isOpen) fetchSummary(); }, [isOpen, date]);
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-            <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl animate-fadeIn">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold flex items-center gap-2 text-gray-800">
-                        <Calendar className="text-blue-600"/> Day Summary
-                    </h3>
-                    <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-100 transition">
-                        <X size={24} className="text-gray-400 hover:text-gray-600"/>
-                    </button>
-                </div>
-                
-                <div className="mb-6">
-                    <label className="text-xs font-bold uppercase text-gray-500 mb-1 block">Select Date</label>
-                    <input 
-                        type="date" 
-                        value={date} 
-                        onChange={(e)=>setDate(e.target.value)} 
-                        className="w-full p-2 border border-gray-300 rounded-lg bg-gray-50 font-medium focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
-                </div>
-
-                {loading ? (
-                    <div className="p-8 text-center text-gray-500 flex flex-col items-center">
-                        <RefreshCw className="animate-spin mb-2" /> Loading data...
-                    </div>
-                ) : data ? (
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-3 gap-4 text-center">
-                            <div className="bg-blue-50 p-3 rounded-xl border border-blue-100">
-                                <div className="text-2xl font-bold text-blue-700">{data.booking_count}</div>
-                                <div className="text-[10px] uppercase font-bold text-blue-400 tracking-wider">Bookings</div>
-                            </div>
-                            <div className="bg-green-50 p-3 rounded-xl border border-green-100">
-                                <div className="text-2xl font-bold text-green-700">{data.dp_bal_count}</div>
-                                <div className="text-[10px] uppercase font-bold text-green-400 tracking-wider">DP + Balance</div>
-                            </div>
-                             <div className="bg-purple-50 p-3 rounded-xl border border-purple-100">
-                                <div className="text-2xl font-bold text-purple-700">{data.other_count}</div>
-                                <div className="text-[10px] uppercase font-bold text-purple-400 tracking-wider">Others</div>
-                            </div>
-                        </div>
-
-                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-3">
-                             <div className="flex justify-between text-sm items-center">
-                                <span className="text-gray-500 font-medium">Cash Collected</span>
-                                <span className="font-bold text-gray-800">₹{(data.cash_total || 0).toLocaleString('en-IN')}</span>
-                             </div>
-                             <div className="flex justify-between text-sm items-center">
-                                <span className="text-gray-500 font-medium">Card</span>
-                                <span className="font-bold text-gray-800">₹{(data.card_total || 0).toLocaleString('en-IN')}</span>
-                             </div>
-                             <div className="flex justify-between text-sm items-center">
-                                <span className="text-gray-500 font-medium">UPI / Online</span>
-                                <span className="font-bold text-gray-800">₹{(data.upi_total || 0).toLocaleString('en-IN')}</span>
-                             </div>
-                             <div className="flex justify-between text-sm items-center">
-                                <span className="text-gray-500 font-medium">Bank Transfer</span>
-                                <span className="font-bold text-gray-800">₹{(data.bank_total || 0).toLocaleString('en-IN')}</span>
-                             </div>
-                             <div className="flex justify-between text-sm items-center">
-                                <span className="text-gray-500 font-medium">Cheque</span>
-                                <span className="font-bold text-gray-800">₹{(data.cheque_total || 0).toLocaleString('en-IN')}</span>
-                             </div>
-                             <div className="border-t border-gray-300 pt-3 mt-2 flex justify-between items-center">
-                                 <span className="font-bold text-gray-800 uppercase text-xs tracking-widest">Total Collected</span>
-                                 <span className="font-extrabold text-green-600 text-xl">₹{(data.total_amount || 0).toLocaleString('en-IN')}</span>
-                             </div>
-                        </div>
-                    </div>
-                ) : <div className="text-center py-8 text-gray-400">No data found for this date.</div>}
-            </div>
-        </div>
-    );
-};
 
 const Receipt = ({ theme }) => {
   const isDark = theme === 'dark';
@@ -116,7 +22,7 @@ const Receipt = ({ theme }) => {
     customerName: '',
     mobile: '',
     gstNo: '',
-    fileNo: '',
+    fileNoSeq: '', 
     hp: '',
     model: '',
     amount: '',
@@ -130,17 +36,17 @@ const Receipt = ({ theme }) => {
   };
 
   const [formData, setFormData] = useState(initialForm);
+  const [filePrefix, setFilePrefix] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [history, setHistory] = useState([]); 
   const [availableMonths, setAvailableMonths] = useState([]);
   const [exportRange, setExportRange] = useState({ from: '', to: '' });
   const [serverError, setServerError] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
-
-  const getFyPrefix = () => {
-      const now = new Date();
-      return String(now.getMonth() < 3 ? now.getFullYear() - 1 : now.getFullYear()).slice(-2);
-  };
+  
+  // Search State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
 
   const formatDate = (dateString) => {
     if (!dateString) return "";
@@ -155,7 +61,12 @@ const Receipt = ({ theme }) => {
       if (!res.ok) throw new Error("Server Error");
       
       const data = await res.json();
-      setFormData(prev => ({ ...prev, receiptNo: String(data.nextNo || '---') }));
+      setFilePrefix(data.prefix || '');
+      setFormData(prev => ({ 
+          ...prev, 
+          receiptNo: String(data.nextReceiptNo || '---'),
+          fileNoSeq: '' // explicitly set to empty so it doesn't auto-fill a sequence
+      }));
       setServerError(false); 
     } catch (err) { 
       setFormData(prev => ({ ...prev, receiptNo: 'OFFLINE' })); 
@@ -163,17 +74,10 @@ const Receipt = ({ theme }) => {
     }
   };
 
-  const fetchHistory = async (query = '') => {
+  const fetchHistory = async () => {
     try {
-      let url = `${API_URL}/general-receipts/list`;
-      if (query) url += `?search=${query}`;
-
-      const res = await fetch(url);
-      if (!res.ok) {
-        setHistory([]); 
-        setServerError(true); 
-        return;
-      }
+      const res = await fetch(`${API_URL}/general-receipts/list`);
+      if (!res.ok) throw new Error("Fetch failed");
       const data = await res.json();
       setHistory(Array.isArray(data) ? data : []);
       setServerError(false);
@@ -211,43 +115,25 @@ const Receipt = ({ theme }) => {
       setFormData({
           ...initialForm, 
           date: new Date().toISOString().split('T')[0],
-          receiptNo: formData.receiptNo 
+          receiptNo: formData.receiptNo,
+          fileNoSeq: '' // Ensure this clears explicitly
       });
       setIsEditing(false);
+      setSearchTerm('');
+      setSearchResults([]);
       fetchNextReceiptNo();
-  };
-
-  const cancelEdit = () => {
-    resetForm();
-  };
-
-  // Helper: Convert raw 252253 to VMA2025/2253
-  const formatFileNumber = (raw) => {
-      const clean = raw.replace(/[^0-9]/g, '');
-      if (clean.length === 6) {
-          const prefix = clean.substring(0, 2); // e.g. 25
-          const suffix = clean.substring(2);    // e.g. 2253
-          return `VMA20${prefix}/${suffix}`;
-      }
-      return raw;
   };
 
   const handleFileChange = (e) => {
     let rawInput = e.target.value;
-    
-    // Just allow typing, no spaces forced in UI if user wants tight input
-    setFormData(prev => ({ ...prev, fileNo: rawInput }));
+    setFormData(prev => ({ ...prev, fileNoSeq: rawInput }));
 
-    const cleanVal = rawInput.replace(/\s/g, '');
+    // Autofill Logic: check history based on full combined file name
+    const cleanCombined = (filePrefix + rawInput).replace(/\s/g, '');
     
-    // Search Logic
-    if (Array.isArray(history) && cleanVal.length >= 6) {
-      const formattedSearch = formatFileNumber(cleanVal);
-      
-      // Search for exact match on VMA format OR raw input match
+    if (Array.isArray(history) && rawInput.length >= 3) {
       const match = history.find(item => 
-          item.file_no === formattedSearch || 
-          item.file_no === cleanVal
+          (item.file_no || '').replace(/\s/g, '') === cleanCombined
       );
 
       if (match) {
@@ -263,8 +149,42 @@ const Receipt = ({ theme }) => {
     }
   };
 
+  const handleSearchInput = async (e) => {
+      const term = e.target.value;
+      setSearchTerm(term);
+      
+      if(term.length > 2) {
+          let queryTerm = term;
+          if (/^\d{6}$/.test(term)) {
+              queryTerm = term.substring(2);
+          }
+          
+          try {
+              const res = await fetch(`${API_URL}/general-receipts/list?search=${queryTerm}`);
+              if(res.ok) {
+                  const data = await res.json();
+                  setSearchResults(data);
+              }
+          } catch(e) { console.error(e); }
+      } else {
+          setSearchResults([]);
+      }
+  };
+
+  const selectSearchResult = (item) => {
+      handleEdit(item);
+      setSearchResults([]);
+      setSearchTerm('');
+  };
+
   const handleEdit = (item) => {
     if (serverError) return alert("System is offline. Cannot edit receipts.");
+
+    // Split loaded file number into Prefix and Sequence components safely
+    let loadedSeq = item.file_no || '';
+    if (filePrefix && loadedSeq.startsWith(filePrefix)) {
+        loadedSeq = loadedSeq.substring(filePrefix.length);
+    }
 
     setFormData({
         receiptNo: item.receipt_no,
@@ -272,7 +192,7 @@ const Receipt = ({ theme }) => {
         customerName: item.customer_name,
         mobile: item.mobile || '',
         gstNo: item.gst_no || '',
-        fileNo: item.file_no || '', 
+        fileNoSeq: loadedSeq, 
         hp: item.hp_financier || '',
         model: item.model || '',
         amount: item.amount,
@@ -285,6 +205,8 @@ const Receipt = ({ theme }) => {
         status: item.status || 'ACTIVE'
     });
     setIsEditing(true);
+    setSearchTerm('');
+    setSearchResults([]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -296,22 +218,20 @@ const Receipt = ({ theme }) => {
   };
 
   const saveToDb = async (dataOverride = null) => {
-    if (serverError) return alert("System Offline: Cannot save data.");
+    if (serverError) {
+        if(window.toast) window.toast("System Offline: Cannot save data.", "error");
+        return;
+    }
 
     const dataToSave = dataOverride || formData;
-    
-    // Auto-Format File No before save (252253 -> VMA2025/2253)
-    let finalFileNo = dataToSave.fileNo.trim();
-    if(finalFileNo.length === 6 && !isNaN(finalFileNo)) {
-        finalFileNo = formatFileNumber(finalFileNo);
-    }
+    let finalFileNo = filePrefix + dataToSave.fileNoSeq.trim();
 
     const method = isEditing ? 'PUT' : 'POST';
     const finalPaymentType = dataToSave.paymentType === 'Other' ? dataToSave.customPaymentType : dataToSave.paymentType;
     const url = isEditing ? `${API_URL}/general-receipts/${dataToSave.receiptNo}` : `${API_URL}/general-receipts`;
     
     try {
-      await fetch(url, {
+      const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -332,6 +252,10 @@ const Receipt = ({ theme }) => {
           status: dataToSave.status || 'ACTIVE'
         })
       });
+
+      if (!res.ok) throw new Error("Database Save Failed");
+      
+      if(window.toast) window.toast("Receipt Saved Successfully", "success");
       
       fetchHistory();
       fetchAvailableMonths();
@@ -340,11 +264,11 @@ const Receipt = ({ theme }) => {
         if(dataOverride?.status === 'CANCELLED') resetForm();
         else resetForm();
       } else {
-        setFormData(prev => ({ ...initialForm, date: prev.date, receiptNo: prev.receiptNo }));
+        setFormData(prev => ({ ...initialForm, date: prev.date, receiptNo: prev.receiptNo, fileNoSeq: '' }));
         await fetchNextReceiptNo();
       }
     } catch (err) { 
-      alert("Error saving receipt. Please check connection."); 
+      if(window.toast) window.toast("Error saving receipt. Please check connection.", "error");
     }
   };
 
@@ -353,11 +277,11 @@ const Receipt = ({ theme }) => {
     documentTitle: `Receipt_${formData.receiptNo}`,
     onBeforeGetContent: () => {
         if (serverError) {
-          alert("System Offline: Cannot print.");
+          if(window.toast) window.toast("System Offline: Cannot print.", "error");
           return Promise.reject();
         }
         if (!formData.amount || isNaN(formData.amount)) {
-            alert("Please enter a valid amount.");
+            if(window.toast) window.toast("Please enter a valid amount.", "error");
             return Promise.reject();
         }
     },
@@ -398,6 +322,7 @@ const Receipt = ({ theme }) => {
     : 'ZERO ONLY';
 
   const hasValue = (val) => val && val.trim().length > 0;
+  const fullFileNo = filePrefix + formData.fileNoSeq;
 
   // COMPACT STYLING
   const inputClass = `w-full p-1.5 rounded border text-sm ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"} focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed`;
@@ -447,14 +372,9 @@ const Receipt = ({ theme }) => {
             <div>NO: <span className="text-red-600 text-2xl ml-2">{formData.receiptNo}</span></div>
             
             <div className="flex items-center gap-8">
-                {hasValue(formData.fileNo) && (
+                {hasValue(fullFileNo) && (
                     <div className="text-base font-bold text-gray-800">
-                        {/* Auto-format display on receipt too if it's raw number */}
-                        File Number: <span className="ml-1">{
-                            !isNaN(formData.fileNo) && formData.fileNo.length === 6 
-                            ? formatFileNumber(formData.fileNo) 
-                            : formData.fileNo
-                        }</span>
+                        File Number: <span className="ml-1">{fullFileNo}</span>
                     </div>
                 )}
                 <div>DATE: <span className="ml-2 text-xl">{formatDate(formData.date)}</span></div>
@@ -567,13 +487,52 @@ const Receipt = ({ theme }) => {
 
   return (
     <div className="container mx-auto p-2 md:p-4 max-w-7xl">
-      <DaySummaryModal isOpen={showSummary} onClose={() => setShowSummary(false)} />
+      <DaySummary isOpen={showSummary} onClose={() => setShowSummary(false)} theme={theme} />
+
+      {/* Prominent Header / Search Bar Layout */}
+      <div className={`mb-8 flex flex-col sm:flex-row justify-between items-center p-4 rounded-2xl shadow-lg gap-4 ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-gradient-to-r from-blue-100 to-indigo-100 border border-blue-200'}`}>
+          <div className="w-full sm:w-[400px] relative z-50">
+              <input 
+                  type="text" 
+                  value={searchTerm} 
+                  onChange={handleSearchInput}
+                  placeholder="Search by File No, Name..." 
+                  className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm shadow-inner focus:ring-2 outline-none transition-all border backdrop-blur-md ${isDark ? 'bg-white/10 border-white/20 text-white focus:ring-white/50 placeholder-gray-300' : 'bg-white/50 border-white/60 text-gray-800 focus:ring-blue-500 placeholder-gray-600'}`}
+              />
+              <Search className={`absolute left-3 top-3 ${isDark ? 'text-gray-300' : 'text-gray-500'}`} size={18}/>
+              
+              {searchResults.length > 0 && (
+                  <div className={`absolute top-12 left-0 right-0 border shadow-[0_8px_32px_0_rgba(31,38,135,0.15)] rounded-2xl max-h-80 overflow-y-auto z-50 backdrop-blur-xl animate-fadeIn ${isDark ? 'bg-gray-900/95 border-white/10' : 'bg-white/95 border-white/60'}`}>
+                      {searchResults.map(r => (
+                          <div key={r.receipt_no} onClick={() => selectSearchResult(r)} className={`p-4 border-b cursor-pointer flex justify-between items-center transition-colors ${isDark ? 'border-white/5 hover:bg-white/10' : 'border-gray-200/50 hover:bg-white/50'}`}>
+                              <div>
+                                  <div className={`font-bold text-sm ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>Receipt #{r.receipt_no}</div>
+                                  <div className={`text-sm font-semibold mt-0.5 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{r.customer_name}</div>
+                                  <div className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>File: {r.file_no || '--'} • Mob: {r.mobile || '--'}</div>
+                              </div>
+                              <div className={`font-bold text-lg ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                                  ₹{r.amount}
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+              )}
+          </div>
+
+          <button 
+              onClick={() => setShowSummary(true)} 
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold transition-all border shadow-sm whitespace-nowrap w-full sm:w-auto justify-center backdrop-blur-md ${isDark ? 'bg-white/10 hover:bg-white/20 border-white/20 text-white' : 'bg-white/40 hover:bg-white/60 border-white/50 text-gray-800'}`}
+          >
+              <Calendar size={18} />
+              Daily Summary
+          </button>
+      </div>
 
       {/* Main Layout */}
       <div className="flex flex-col lg:flex-row gap-4 mb-8">
         
         {/* LEFT PANEL: Form */}
-        <div className={`w-full lg:w-[380px] lg:flex-shrink-0 p-4 rounded-xl shadow-lg h-fit ${isDark ? "bg-gray-800 border border-gray-700" : "bg-white border border-gray-100"}`}>
+        <div className={`w-full lg:w-[380px] lg:flex-shrink-0 p-4 rounded-xl shadow-lg h-fit ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"} border`}>
           
           {serverError && (
             <div className="mb-4 bg-red-100 border-l-4 border-red-500 text-red-700 p-2 rounded shadow-md animate-pulse">
@@ -586,23 +545,17 @@ const Receipt = ({ theme }) => {
 
           <div className="flex items-center justify-between mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
             <h2 className={`text-base font-bold ${isDark ? "text-white" : "text-gray-800"}`}>
-                {isEditing ? "Edit Receipt" : "Receipt Details"}
+                {isEditing ? "Edit Receipt" : "New Receipt"}
             </h2>
             <div className="flex gap-2">
-                {/* Day Summary Button moved here for compactness */}
-                <button onClick={() => setShowSummary(true)} className="p-1.5 rounded hover:bg-purple-100 text-purple-600 transition" title="View Day Summary">
-                    <Calendar size={16} />
-                </button>
-
                 {isEditing && (
-                    <>
-                        <button onClick={handleCancelReceipt} className="bg-red-100 text-red-600 hover:bg-red-200 p-1.5 rounded transition" title="Cancel Receipt">
-                            <Ban size={16} />
-                        </button>
-                        <button onClick={cancelEdit} className="text-gray-500 hover:text-gray-700 p-1.5 rounded transition" title="Close Edit"><XCircle size={16} /></button>
-                    </>
+                    <button onClick={handleCancelReceipt} className="bg-red-100 text-red-600 hover:bg-red-200 p-1.5 rounded transition" title="Cancel Receipt">
+                        <Ban size={16} />
+                    </button>
                 )}
-                <button onClick={resetForm} className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition" title="Clear & Reset"><RefreshCw size={16} /></button>
+                <button onClick={resetForm} className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                    <RefreshCw size={14} /> Clear & Reset
+                </button>
             </div>
           </div>
           
@@ -616,13 +569,18 @@ const Receipt = ({ theme }) => {
               <div className="grid grid-cols-2 gap-2">
                  <div>
                      <label className={labelClass}>File No</label>
-                     <input 
-                        name="fileNo" 
-                        value={formData.fileNo} 
-                        onChange={handleFileChange} 
-                        className={`${inputClass} font-mono tracking-wide`} 
-                        placeholder="252253" 
-                     />
+                     <div className="flex shadow-sm rounded border overflow-hidden">
+                        <span className={`px-2 py-1.5 text-xs font-mono font-bold flex items-center justify-center ${isDark ? 'bg-gray-600 border-gray-500 text-gray-300' : 'bg-gray-100 border-gray-300 text-gray-500'} select-none`}>
+                            {filePrefix}
+                        </span>
+                        <input 
+                           name="fileNoSeq" 
+                           value={formData.fileNoSeq} 
+                           onChange={handleFileChange} 
+                           className={`w-full p-1.5 text-sm font-mono tracking-wide font-bold text-blue-600 focus:outline-none ${isDark ? 'bg-gray-700 text-blue-400' : 'bg-white'}`} 
+                           placeholder="XXXX" 
+                        />
+                     </div>
                  </div>
                  <div><label className={labelClass}>Amount (₹)</label><input type="number" name="amount" value={formData.amount} onChange={handleChange} className={inputClass} /></div>
               </div>
@@ -794,10 +752,10 @@ const Receipt = ({ theme }) => {
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
             <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-800"}`}>Archives</h2>
             <div className="flex gap-2 items-center flex-wrap">
-                <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-700 p-1 rounded border border-gray-300">
-                  <input type="date" value={exportRange.from} onChange={(e)=>setExportRange({...exportRange, from: e.target.value})} className="bg-transparent text-xs" />
-                  <span className="text-[10px]">TO</span>
-                  <input type="date" value={exportRange.to} onChange={(e)=>setExportRange({...exportRange, to: e.target.value})} className="bg-transparent text-xs" />
+                <div className={`flex items-center gap-1 p-1 rounded border ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-300'}`}>
+                  <input type="date" value={exportRange.from} onChange={(e)=>setExportRange({...exportRange, from: e.target.value})} className={`bg-transparent text-xs ${isDark ? 'text-white outline-none' : 'outline-none'}`} />
+                  <span className={`text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>TO</span>
+                  <input type="date" value={exportRange.to} onChange={(e)=>setExportRange({...exportRange, to: e.target.value})} className={`bg-transparent text-xs ${isDark ? 'text-white outline-none' : 'outline-none'}`} />
                   <button onClick={handleExport} className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-[10px] font-bold">EXPORT</button>
                 </div>
             </div>
@@ -816,7 +774,7 @@ const Receipt = ({ theme }) => {
                 </thead>
                 <tbody>
                     {history.map(item => (
-                        <tr key={item.receipt_no} className={`${tableRowClass} group cursor-pointer ${item.status === 'CANCELLED' ? 'bg-red-50 hover:bg-red-100' : ''}`} onClick={() => handleEdit(item)}>
+                        <tr key={item.receipt_no} className={`${tableRowClass} group cursor-pointer ${item.status === 'CANCELLED' ? (isDark ? 'bg-red-900/20 hover:bg-red-900/40' : 'bg-red-50 hover:bg-red-100') : ''}`} onClick={() => handleEdit(item)}>
                             <td className="px-4 py-3">{item.receipt_no}</td>
                             <td className="px-4 py-3">{formatDate(item.date)}</td>
                             <td className="px-4 py-3 font-semibold">
