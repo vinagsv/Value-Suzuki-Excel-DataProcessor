@@ -22,8 +22,8 @@ const AdminPanel = ({ theme }) => {
     // Bulk Delete State
     const [delRange, setDelRange] = useState({ from: '', to: '' });
 
-    // Excel State
-    const [excelFile, setExcelFile] = useState(null);
+    // PDF Upload State
+    const [pdfFile, setPdfFile] = useState(null);
 
     // Sequence Controls State
     const [seqValues, setSeqValues] = useState({
@@ -43,7 +43,7 @@ const AdminPanel = ({ theme }) => {
 
     // --- USERS ---
     const fetchUsers = async () => {
-        const res = await fetch(`${API_URL}/admin/users`);
+        const res = await fetch(`${API_URL}/admin/users`, { credentials: 'include' });
         if(res.ok) setUsers(await res.json());
     };
 
@@ -52,7 +52,8 @@ const AdminPanel = ({ theme }) => {
         const res = await fetch(`${API_URL}/admin/users`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(newUser)
+            body: JSON.stringify(newUser),
+            credentials: 'include'
         });
         if(res.ok) {
             showToast('User created');
@@ -65,7 +66,10 @@ const AdminPanel = ({ theme }) => {
 
     const handleDeleteUser = async (id) => {
         if(!confirm("Delete user?")) return;
-        const res = await fetch(`${API_URL}/admin/users/${id}`, { method: 'DELETE' });
+        const res = await fetch(`${API_URL}/admin/users/${id}`, { 
+            method: 'DELETE',
+            credentials: 'include'
+        });
         if(res.ok) {
             showToast('User deleted');
             fetchUsers();
@@ -76,7 +80,7 @@ const AdminPanel = ({ theme }) => {
 
     // --- SETTINGS ---
     const fetchSettings = async () => {
-        const res = await fetch(`${API_URL}/admin/settings`);
+        const res = await fetch(`${API_URL}/admin/settings`, { credentials: 'include' });
         if(res.ok) {
             const data = await res.json();
             setSettings(prev => ({ ...prev, ...data }));
@@ -87,7 +91,8 @@ const AdminPanel = ({ theme }) => {
         const res = await fetch(`${API_URL}/admin/settings`, {
             method: 'PUT',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(settings)
+            body: JSON.stringify(settings),
+            credentials: 'include'
         });
         if(res.ok) {
             showToast('Settings saved successfully');
@@ -110,7 +115,8 @@ const AdminPanel = ({ theme }) => {
             const res = await fetch(`${API_URL}/admin/reset-sequence`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ type, value: val })
+                body: JSON.stringify({ type, value: val }),
+                credentials: 'include'
             });
             const data = await res.json();
             if(res.ok) {
@@ -130,25 +136,33 @@ const AdminPanel = ({ theme }) => {
         const res = await fetch(`${API_URL}/admin/receipts/bulk`, {
             method: 'DELETE',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ fromDate: delRange.from, toDate: delRange.to })
+            body: JSON.stringify({ fromDate: delRange.from, toDate: delRange.to }),
+            credentials: 'include'
         });
         const data = await res.json();
         if(res.ok) showToast(data.message);
         else showToast(data.error, 'error');
     };
 
-    const handleExcelUpload = async () => {
-        if(!excelFile) return;
+    const handlePdfUpload = async () => {
+        if(!pdfFile) return;
         const formData = new FormData();
-        formData.append('file', excelFile);
+        formData.append('file', pdfFile);
         
         const res = await fetch(`${API_URL}/admin/pricelist/upload`, {
             method: 'POST',
-            body: formData
+            body: formData,
+            credentials: 'include'
         });
         const data = await res.json();
-        if(res.ok) showToast(data.message);
-        else showToast(data.error, 'error');
+        if(res.ok) {
+            showToast(data.message);
+            setPdfFile(null); // Clear file input after successful upload
+            // Optionally clear the input field visually
+            document.getElementById('pdf-upload-input').value = "";
+        } else {
+            showToast(data.error, 'error');
+        }
     };
 
     const tabClass = (id) => `px-6 py-3 font-bold rounded-t-lg transition-colors ${activeTab === id 
@@ -320,11 +334,24 @@ const AdminPanel = ({ theme }) => {
                             <button onClick={handleBulkDelete} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-bold w-full">Delete Permanently</button>
                         </div>
 
+                        {/* Price List PDF Upload */}
                         <div className={`p-6 rounded-xl border-l-4 border-blue-500 ${isDark ? 'bg-blue-900/10' : 'bg-blue-50'}`}>
-                            <h3 className="font-bold text-blue-600 flex items-center gap-2 mb-4"><Upload/> Price List Upload</h3>
-                            <p className="text-sm mb-4">Upload an Excel sheet to replace the current Price List database.</p>
-                            <input type="file" accept=".xlsx, .xls" onChange={e => setExcelFile(e.target.files[0])} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 mb-4"/>
-                            <button onClick={handleExcelUpload} disabled={!excelFile} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded font-bold w-full">Upload & Replace</button>
+                            <h3 className="font-bold text-blue-600 flex items-center gap-2 mb-4"><Upload/> Price List PDF Upload</h3>
+                            <p className="text-sm mb-4 text-gray-500">Save your Excel file as a PDF and upload it here for a perfect visual snapshot.</p>
+                            <input 
+                                id="pdf-upload-input"
+                                type="file" 
+                                accept=".pdf" 
+                                onChange={e => setPdfFile(e.target.files[0])} 
+                                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 mb-4"
+                            />
+                            <button 
+                                onClick={handlePdfUpload} 
+                                disabled={!pdfFile} 
+                                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded font-bold w-full transition-colors"
+                            >
+                                Upload PDF Snapshot
+                            </button>
                         </div>
                     </div>
                 )}

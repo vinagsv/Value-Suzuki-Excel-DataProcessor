@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Search, RefreshCw, FileText, Calculator, ArrowRightLeft, Trash2, User, Database, Globe } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Search, RefreshCw, FileText, User, Database, Globe } from "lucide-react";
+import Calculator from "../components/Calculator";
 
 const FontStyle = () => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap');
     *, *::before, *::after { box-sizing: border-box; }
     :root { --bg-base:#f4f5f7; --bg-surface:#ffffff; --bg-panel:#ffffff; --bg-elevated:#f0f1f4; --bg-hover:#eef0f5; --border-dim:rgba(0,0,0,0.07); --border-mid:rgba(0,0,0,0.11); --border-bright:rgba(0,0,0,0.18); --text-primary:#111827; --text-secondary:#4b5563; --text-muted:#9ca3af; --accent:#4f63f0; --accent-dim:rgba(79,99,240,0.10); --accent-glow:rgba(79,99,240,0.20); --green:#059669; --green-dim:rgba(5,150,105,0.09); --red:#dc2626; --red-dim:rgba(220,38,38,0.08); --amber:#d97706; }
-    body { margin: 0; background: var(--bg-base); }
-    .verify-root { height: calc(100vh - 80px); width: 100%; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-base); color: var(--text-primary); font-family: 'DM Sans', sans-serif; }
+    .verify-root { height: 100%; width: 100%; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-base); color: var(--text-primary); font-family: 'DM Sans', sans-serif; }
     .v-header { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 64px; border-bottom: 1px solid var(--border-dim); background: var(--bg-surface); position: relative; z-index: 50; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
     .v-header::after { content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0.5; }
     .v-logo { display: flex; align-items: center; gap: 12px; }
@@ -46,22 +46,13 @@ const FontStyle = () => (
     .v-tables-row { flex: 1; min-height: 250px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
     .v-table-wrap { flex: 1; overflow: auto; max-height: 400px; } table.v-table { width: 100%; border-collapse: collapse; } table.v-table thead th { position: sticky; top: 0; z-index: 10; padding: 11px 16px; background: #f8f9fb; font-family: 'Syne', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border-dim); white-space: nowrap; text-align: left; } table.v-table tbody tr { transition: background 0.15s; border-bottom: 1px solid var(--border-dim); } table.v-table tbody tr:hover { background: var(--bg-hover); } table.v-table td { padding: 12px 16px; font-size: 13px; vertical-align: middle; }
     .v-table-empty { padding: 30px; text-align: center; color: var(--text-muted); font-size: 13px; }
-    
     .v-sidebar { width: 300px; flex: none; display: flex; flex-direction: column; border-left: 1px solid var(--border-dim); background: var(--bg-surface); box-shadow: -1px 0 4px rgba(0,0,0,0.04); }
-    .v-sidebar-header { padding: 16px; border-bottom: 1px solid var(--border-dim); display:flex; justify-content:space-between; align-items:center; }
-    .v-sidebar-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size:12px; text-transform:uppercase; color: var(--text-secondary); display:flex; align-items:center; gap:6px; }
-    .v-clear-btn { background: none; border: none; color: var(--red); cursor: pointer; font-size: 11px; font-weight: bold; display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 4px; } .v-clear-btn:hover { background: var(--red-dim); }
-    .v-calc-body { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
-    .v-calc-input { width: 100%; flex: none; height: 60px; padding: 12px 14px; background: var(--bg-elevated); border: 1px solid var(--border-mid); border-radius: 10px; color: var(--text-primary); font-family: 'DM Mono', monospace; font-size: 16px; resize: none; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
-    .v-calc-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
-    .v-calc-result-box { background: var(--bg-elevated); border: 1px solid var(--border-mid); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-end; position: relative; overflow: hidden; flex: 1; gap: 8px;} 
-    .v-calc-history { font-family: 'Calibri', 'Times New Roman', serif; font-size: 18px; color: var(--text-secondary); text-align: right; word-break: break-all;}
-    .v-calc-value { font-family: 'Calibri', 'Times New Roman', serif; font-size: 42px; font-weight: bold; color: var(--accent); text-align: right; word-break: break-all; line-height: 1.1;}
     @keyframes spin { to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }
   `}</style>
 );
 
 const Verify = ({ theme }) => {
+  const isDark = theme === 'dark';
   const [fileNumber, setFileNumber] = useState("");
   const [searchCandidates, setSearchCandidates] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -69,11 +60,6 @@ const Verify = ({ theme }) => {
   const [reqData, setReqData] = useState(null);
   const [localHistory, setLocalHistory] = useState(null);
   const [reqToken, setReqToken] = useState(null);
-
-  // Calculator State
-  const [calcInput, setCalcInput] = useState("");
-  const [calcResult, setCalcResult] = useState("0");
-  const [calcHistory, setCalcHistory] = useState("");
 
   const REQ_API_URL = import.meta.env.VITE_REQ_API_URL;
   const LOCAL_API_URL = import.meta.env.VITE_API_URL;
@@ -96,7 +82,7 @@ const Verify = ({ theme }) => {
   const handleConnect = async () => {
     setConnectionStatus("connecting");
     try {
-        const credRes = await fetch(`${LOCAL_API_URL}/auth/portal-creds`);
+        const credRes = await fetch(`${LOCAL_API_URL}/auth/portal-creds`, { credentials: 'include' });
         if(!credRes.ok) throw new Error("Could not fetch portal credentials");
         const creds = await credRes.json();
         
@@ -140,7 +126,7 @@ const Verify = ({ theme }) => {
       const safeFileNumber = encodeURIComponent(targetFileNo);
       
       // 1. Local Fetch
-      const localFetchPromise = fetch(`${LOCAL_API_URL}/general-receipts/customer-history/${safeFileNumber}`).then(res => res.json());
+      const localFetchPromise = fetch(`${LOCAL_API_URL}/general-receipts/customer-history/${safeFileNumber}`, { credentials: 'include' }).then(res => res.json());
 
       // 2. RMS Fetch
       let rmsFetchPromise = Promise.reject("Not Connected");
@@ -189,7 +175,7 @@ const Verify = ({ theme }) => {
 
       try {
           // Fetch Local Matches
-          const localRes = await fetch(`${LOCAL_API_URL}/general-receipts/list?search=${queryTerm}`);
+          const localRes = await fetch(`${LOCAL_API_URL}/general-receipts/list?search=${queryTerm}`, { credentials: 'include' });
           let localData = [];
           if (localRes.ok) localData = await localRes.json();
 
@@ -249,34 +235,24 @@ const Verify = ({ theme }) => {
       }
   };
 
-  // Calculator Logic
-  const solveCalc = () => { 
-      try { 
-          // Basic sanitization
-          const sanitized = calcInput.replace(/[^0-9+\-*/().]/g, '');
-          if(!sanitized) return;
-
-          const res = new Function('return ' + sanitized)(); 
-          if(res !== undefined) { 
-              setCalcHistory(calcInput + " ="); 
-              setCalcResult(res); 
-              setCalcInput(""); 
-          } 
-      } catch {} 
-  };
-  
-  const clearCalc = () => { setCalcInput(""); setCalcResult("0"); setCalcHistory(""); };
-
   const totalCost = reqData ? Number(reqData.totalAmount) : 0;
   const totalPaid = localHistory ? Number(localHistory.totalPaid) : 0;
   const netDiff = (reqData && localHistory) ? totalPaid - totalCost : 0;
   const isExcess = netDiff >= 0;
   const missingRMS = !reqData;
 
+  // Use inline style logic for dark mode applying over custom vars to keep the component functional
+  const themeStyle = isDark ? {
+      '--bg-base': '#111827', '--bg-surface': '#1f2937', '--bg-panel': '#1f2937',
+      '--bg-elevated': '#374151', '--bg-hover': '#374151', '--border-dim': '#374151',
+      '--border-mid': '#4b5563', '--text-primary': '#f9fafb', '--text-secondary': '#d1d5db',
+      '--text-muted': '#9ca3af'
+  } : {};
+
   return (
     <>
       <FontStyle />
-      <div className="verify-root">
+      <div className="verify-root" style={themeStyle}>
         <header className="v-header">
           <div className="v-logo">
             <div className="v-logo-icon"><FileText size={16} color="white" /></div>
@@ -379,14 +355,7 @@ const Verify = ({ theme }) => {
           </main>
 
           <aside className="v-sidebar">
-             <div className="v-sidebar-header"><span className="v-sidebar-title"><Calculator size={14}/> Calculator</span><button onClick={clearCalc} className="v-clear-btn"><Trash2 size={10}/> Clear</button></div>
-             <div className="v-calc-body">
-                 <textarea value={calcInput} onChange={(e)=>setCalcInput(e.target.value)} onKeyDown={(e)=>{if(e.key==='Enter'){e.preventDefault();solveCalc();}}} className="v-calc-input" placeholder="e.g. 500 + 1200 - 300"/>
-                 <div className="v-calc-result-box">
-                    <div className="v-calc-history">{calcHistory}</div>
-                    <div className="v-calc-value" title={calcResult}>{calcResult}</div>
-                 </div>
-             </div>
+             <Calculator theme={theme} />
           </aside>
         </div>
       </div>

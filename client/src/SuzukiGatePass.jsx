@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { Printer, Search, FileSpreadsheet, Edit3, XCircle, WifiOff, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import tailwindStyles from './index.css?inline';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -252,7 +253,7 @@ const SuzukiGatePass = ({ theme }) => {
       <div className="flex flex-col lg:flex-row gap-4 mb-8">
         
         {/* COMPACT FORM PANEL */}
-        <div className={`w-full lg:w-1/3 p-4 rounded-xl shadow-lg h-fit ${isDark ? "bg-gray-800 border border-gray-700" : "bg-white border border-gray-100"}`}>
+        <div className={`w-full lg:w-1/3 p-4 rounded-xl shadow-lg h-fit ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"}`}>
           
           {serverError && (
             <div className="mb-3 bg-red-100 border-l-4 border-red-500 text-red-700 p-2 rounded shadow-sm animate-pulse">
@@ -343,11 +344,38 @@ const SuzukiGatePass = ({ theme }) => {
 
         {/* PRINT PREVIEW PANEL */}
         <div className={`w-full lg:w-2/3 rounded-xl p-4 overflow-auto flex justify-center items-start ${isDark ? "bg-gray-700/50" : "bg-gray-200"}`}>
-             <style type="text/css" media="print">
-               {` @page { size: auto; margin: 0mm; } html, body { margin: 0; padding: 0; background: white; width: 100%; height: 100%; } .print-container { width: 100% !important; height: 148.5mm !important; position: relative; padding-left: ${LAYOUT.paddingX} !important; padding-right: ${LAYOUT.paddingX} !important; padding-top: ${LAYOUT.paddingY} !important; overflow: hidden; } `}
-             </style>
              <div className="transform scale-[0.7] lg:scale-90 origin-top bg-white shadow-2xl">
                 <div ref={componentRef} className="print-container text-black font-sans relative flex flex-col" style={{ width: '210mm', height: LAYOUT.height, paddingLeft: LAYOUT.paddingX, paddingRight: LAYOUT.paddingX, paddingTop: LAYOUT.paddingY, backgroundColor: 'white' }}>
+                   
+                   <style type="text/css" media="print">
+                    {tailwindStyles}
+                    {`
+                      @page {
+                        size: auto;
+                        margin: 0mm !important;
+                      }
+                      html, body {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background: white;
+                        width: 100%;
+                        height: 100%;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                      }
+                      .print-container {
+                        width: 100% !important;
+                        height: 148.5mm !important;
+                        position: relative !important;
+                        padding-left: ${LAYOUT.paddingX} !important;
+                        padding-right: ${LAYOUT.paddingX} !important;
+                        padding-top: ${LAYOUT.paddingY} !important;
+                        overflow: hidden !important;
+                        box-sizing: border-box !important;
+                      }
+                    `}
+                   </style>
+
                    <div className="flex justify-between items-start mb-1">
                        <div className="w-[45%]"><img src="/suzuki-logo.png" alt="Suzuki" style={{width:'220px'}} onError={(e)=>{e.target.style.display='none'}}/></div>
                        <div className="w-[55%] text-right pt-2">
@@ -374,7 +402,6 @@ const SuzukiGatePass = ({ theme }) => {
                        {hasValue(formData.narration) && <div className="flex items-end w-full mt-2"><span className="font-bold mr-2 uppercase w-32 shrink-0">Narration:</span><span className="border-b border-dotted border-black flex-grow px-2 font-medium text-sm uppercase">{formData.narration}</span></div>}
                    </div>
 
-                   {/* DYNAMIC SIGNATORY SECTION - NO mt-auto */}
                    <div className="mt-8 flex justify-end">
                        <div className="text-center">
                            <div className="text-[10px] font-bold mb-8">For VALUE MOTOR AGENCY PVT LTD</div>

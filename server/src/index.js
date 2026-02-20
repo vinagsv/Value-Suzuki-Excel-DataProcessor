@@ -12,6 +12,7 @@ import receiptRoutes from './routes/dp_receipts.js';
 import attendanceRoutes from './routes/attendance.js';
 import generalReceiptRoutes from './routes/general_receipts.js';
 import adminRoutes from './routes/admin.js'; 
+import pricelistRoutes from './routes/pricelist.js';
 
 import { verifyToken, checkRole } from './middleware/auth.js';
 
@@ -37,6 +38,7 @@ app.use('/api/gatepass', verifyToken, gatepassRoutes);
 app.use('/api/receipts', verifyToken, receiptRoutes);
 app.use('/api/attendance', verifyToken, attendanceRoutes);
 app.use('/api/general-receipts', verifyToken, generalReceiptRoutes);
+app.use('/api/pricelist', verifyToken, pricelistRoutes);
 
 // Admin Routes (Protected + Role Check)
 app.use('/api/admin', verifyToken, checkRole('admin'), adminRoutes);

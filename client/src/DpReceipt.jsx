@@ -3,6 +3,7 @@ import { useReactToPrint } from 'react-to-print';
 import { ToWords } from 'to-words';
 import { Printer, RefreshCw, FileSpreadsheet, Search, Edit3, XCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import tailwindStyles from './index.css?inline'; 
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -196,10 +197,35 @@ const DpReceipt = ({ theme }) => {
 
         <div className={`w-full lg:w-2/3 rounded-xl p-1 overflow-auto flex justify-center ${isDark ? "bg-gray-700/50" : "bg-gray-200"}`}>
            <div className="transform scale-[0.6] md:scale-[0.75] lg:scale-90 origin-top p-4">
-            <style type="text/css" media="print">
-              {` @page { size: A4; margin: 0; } body { margin: 0; padding: 0; background: white; } .print-container { width: 100% !important; height: 100% !important; margin: 0 !important; padding: ${LAYOUT.pagePadding} !important; box-shadow: none !important; border: none !important; position: absolute; top: 0; left: 0; } `}
-            </style>
+            
             <div ref={componentRef} className="print-container bg-white shadow-2xl text-black font-sans leading-snug mx-auto" style={{ width: '210mm', minHeight: '297mm', padding: LAYOUT.pagePadding, boxSizing: 'border-box' }}>
+              <style type="text/css" media="print">
+                {tailwindStyles}
+                {`
+                  @page { size: A4 portrait; margin: 0mm !important; }
+                  html, body {
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    width: 100%;
+                    height: 100%;
+                    background: white;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                  }
+                  .print-container {
+                    width: 100% !important;
+                    height: 100% !important;
+                    margin: 0 !important;
+                    padding: ${LAYOUT.pagePadding} !important;
+                    box-shadow: none !important;
+                    border: none !important;
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                  }
+                `}
+              </style>
+
               <div className={`flex justify-between items-start mb-${LAYOUT.headerMarginBottom}`}>
                 <div className="flex flex-col items-center w-1/3"><img src="/suzuki-logo.png" alt="Suzuki Logo" className={`mb-${LAYOUT.logoMarginBottom} z-10`} style={{ height: `${LAYOUT.logoHeight}px`, width: LAYOUT.logoWidth, objectFit: 'contain', position: 'relative', top: `${LAYOUT.logoVerticalOffset}px` }} onError={(e) => { e.target.style.display='none' }}/></div>
                 <div className="w-2/3 text-right">

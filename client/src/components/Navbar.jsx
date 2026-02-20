@@ -7,6 +7,7 @@ const Navbar = ({ activePage, setActivePage, theme, toggleTheme, onLogout, userR
   const pages = [
     { id: "receipt", name: "Receipt" },
     { id: "verify", name: "Verify" },
+    { id: "pricelist", name: "Price List" },
     { id: "gatepass", name: "Gate Pass" },
     { id: "dp_receipt", name: "DP Receipt" },
     { id: "vahan", name: "VAHAN" },
@@ -16,7 +17,7 @@ const Navbar = ({ activePage, setActivePage, theme, toggleTheme, onLogout, userR
   ];
 
   return (
-    <nav className={`fixed top-0 left-0 right-0 h-16 ${isDark ? "bg-gray-800/80 border-gray-700" : "bg-white/80 border-gray-200"} border-b backdrop-blur-sm shadow-lg z-50 flex items-center justify-between px-6`}>
+    <nav className={`absolute top-0 left-0 right-0 h-16 ${isDark ? "bg-gray-800/80 border-gray-700" : "bg-white/80 border-gray-200"} border-b backdrop-blur-sm shadow-lg z-50 flex items-center justify-between px-6`}>
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
         {pages.map((page) => {
           const isActive = activePage === page.id;
@@ -36,7 +37,7 @@ const Navbar = ({ activePage, setActivePage, theme, toggleTheme, onLogout, userR
         })}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 ml-4">
         {userRole === 'admin' && (
             <button 
                 onClick={() => setActivePage("admin")}

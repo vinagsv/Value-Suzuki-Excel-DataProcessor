@@ -4,6 +4,7 @@ import { ToWords } from 'to-words';
 import { Printer, RefreshCw, Edit3, WifiOff, Calendar, Ban, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import DaySummary from './DaySummary';
+import tailwindStyles from '../index.css?inline'; 
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -30,7 +31,6 @@ const Receipt = ({ theme }) => {
     customPaymentType: '',
     paymentMode: 'Cash',
     dated: '', 
-    paymentDate: '',
     chequeNo: '',
     status: 'ACTIVE'
   };
@@ -65,7 +65,7 @@ const Receipt = ({ theme }) => {
       setFormData(prev => ({ 
           ...prev, 
           receiptNo: String(data.nextReceiptNo || '---'),
-          fileNoSeq: '' // explicitly set to empty so it doesn't auto-fill a sequence
+          fileNoSeq: '' 
       }));
       setServerError(false); 
     } catch (err) { 
@@ -116,7 +116,7 @@ const Receipt = ({ theme }) => {
           ...initialForm, 
           date: new Date().toISOString().split('T')[0],
           receiptNo: formData.receiptNo,
-          fileNoSeq: '' // Ensure this clears explicitly
+          fileNoSeq: '' 
       });
       setIsEditing(false);
       setSearchTerm('');
@@ -128,7 +128,6 @@ const Receipt = ({ theme }) => {
     let rawInput = e.target.value;
     setFormData(prev => ({ ...prev, fileNoSeq: rawInput }));
 
-    // Autofill Logic: check history based on full combined file name
     const cleanCombined = (filePrefix + rawInput).replace(/\s/g, '');
     
     if (Array.isArray(history) && rawInput.length >= 3) {
@@ -180,7 +179,6 @@ const Receipt = ({ theme }) => {
   const handleEdit = (item) => {
     if (serverError) return alert("System is offline. Cannot edit receipts.");
 
-    // Split loaded file number into Prefix and Sequence components safely
     let loadedSeq = item.file_no || '';
     if (filePrefix && loadedSeq.startsWith(filePrefix)) {
         loadedSeq = loadedSeq.substring(filePrefix.length);
@@ -199,8 +197,7 @@ const Receipt = ({ theme }) => {
         paymentType: ['Booking', 'Down Payment', 'Balance Payment'].includes(item.payment_type) ? item.payment_type : 'Other',
         customPaymentType: !['Booking', 'Down Payment', 'Balance Payment'].includes(item.payment_type) ? item.payment_type : '',
         paymentMode: item.payment_mode || 'Cash',
-        dated: item.dated ? item.dated.substring(0, 10) : '',
-        paymentDate: item.payment_date ? item.payment_date.substring(0, 10) : '',
+        dated: item.payment_date ? item.payment_date.substring(0, 10) : '',
         chequeNo: item.cheque_no || '',
         status: item.status || 'ACTIVE'
     });
@@ -246,8 +243,7 @@ const Receipt = ({ theme }) => {
           amount: dataToSave.amount,
           payment_type: finalPaymentType,
           payment_mode: dataToSave.paymentMode,
-          dated: dataToSave.dated || null,
-          payment_date: dataToSave.paymentDate || null,
+          payment_date: dataToSave.dated || null,
           cheque_no: dataToSave.chequeNo || null,
           status: dataToSave.status || 'ACTIVE'
         })
@@ -308,7 +304,8 @@ const Receipt = ({ theme }) => {
         "Amount": item.amount,
         "Type": item.payment_type,
         "Mode": item.payment_mode,
-        "Cheque No": item.cheque_no
+        "Cheque No": item.cheque_no,
+        "Dated": item.payment_date ? formatDate(item.payment_date) : ''
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
@@ -324,7 +321,6 @@ const Receipt = ({ theme }) => {
   const hasValue = (val) => val && val.trim().length > 0;
   const fullFileNo = filePrefix + formData.fileNoSeq;
 
-  // COMPACT STYLING
   const inputClass = `w-full p-1.5 rounded border text-sm ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"} focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed`;
   const labelClass = `block text-[10px] font-bold uppercase mb-0.5 ${isDark ? "text-gray-400" : "text-gray-600"}`;
   const tableHeaderClass = `px-4 py-2 text-left text-xs font-semibold ${isDark ? "text-gray-300 bg-gray-700" : "text-gray-600 bg-gray-100"}`;
@@ -489,7 +485,6 @@ const Receipt = ({ theme }) => {
     <div className="container mx-auto p-2 md:p-4 max-w-7xl">
       <DaySummary isOpen={showSummary} onClose={() => setShowSummary(false)} theme={theme} />
 
-      {/* Prominent Header / Search Bar Layout */}
       <div className={`mb-8 flex flex-col sm:flex-row justify-between items-center p-4 rounded-2xl shadow-lg gap-4 ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-gradient-to-r from-blue-100 to-indigo-100 border border-blue-200'}`}>
           <div className="w-full sm:w-[400px] relative z-50">
               <input 
@@ -528,10 +523,8 @@ const Receipt = ({ theme }) => {
           </button>
       </div>
 
-      {/* Main Layout */}
       <div className="flex flex-col lg:flex-row gap-4 mb-8">
         
-        {/* LEFT PANEL: Form */}
         <div className={`w-full lg:w-[380px] lg:flex-shrink-0 p-4 rounded-xl shadow-lg h-fit ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"} border`}>
           
           {serverError && (
@@ -577,7 +570,7 @@ const Receipt = ({ theme }) => {
                            name="fileNoSeq" 
                            value={formData.fileNoSeq} 
                            onChange={handleFileChange} 
-                           className={`w-full p-1.5 text-sm font-mono tracking-wide font-bold text-blue-600 focus:outline-none ${isDark ? 'bg-gray-700 text-blue-400' : 'bg-white'}`} 
+                           className={`w-full p-1.5 text-sm font-mono tracking-wide font-bold text-blue-600 focus:outline-none ${isDark ? 'bg-gray-700 text-red-400' : 'bg-white'}`} 
                            placeholder="XXXX" 
                         />
                      </div>
@@ -653,95 +646,86 @@ const Receipt = ({ theme }) => {
           </div>
         </div>
 
-        {/* RIGHT PANEL: Preview */}
         <div className={`w-full lg:flex-1 rounded-xl p-6 overflow-x-auto flex justify-center items-start ${isDark ? "bg-gray-700/50" : "bg-gray-200"}`}>
-
-          {/* ── Print Styles ── */}
-          <style type="text/css" media="print">
-            {`
-              @page {
-                size: A4 portrait;
-                margin: 0;
-              }
-              html, body {
-                margin: 0;
-                padding: 0;
-                width: 100%;
-                height: 100%;
-                background: white;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-              }
-              .print-container {
-                width: 100% !important;
-                height: 100% !important;
-                padding: 5mm !important;
-                box-sizing: border-box !important;
-                display: flex !important;
-                flex-direction: column !important;
-                justify-content: space-between !important;
-                background: white !important;
-              }
-              .receipt-half {
-                flex: 1 !important;
-                box-sizing: border-box !important;
-                display: flex !important;
-                flex-direction: column !important;
-                min-height: 0 !important;
-              }
-              .receipt-border {
-                border: 3px solid black !important;
-                border-radius: 8px !important;
-                flex: 1 !important;
-                padding: 3mm !important;
-                position: relative !important;
-                box-sizing: border-box !important;
-                overflow: hidden !important;
-                min-height: 0 !important;
-              }
-              .office-copy {
-                display: flex !important;
-                flex-direction: column !important;
-                flex: 1 !important;
-                min-height: 0 !important;
-              }
-              body > *:not(.print-container) { display: none !important; }
-            `}
-          </style>
-
           <div className="shadow-2xl" style={{ width: '754px', height: '533px', overflow: 'hidden', flexShrink: 0 }}>
             <div style={{ width: '794px', height: '561px', transform: 'scale(0.95)', transformOrigin: 'top left' }}>
               <div className="bg-white overflow-hidden" style={{ width: '794px', height: '561px' }}>
-            <div
-              ref={componentRef}
-              className="print-container text-black font-sans bg-white"
-              style={{
-                width: '210mm',
-                height: '297mm',
-                padding: '5mm',
-                boxSizing: 'border-box',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                gap: '10mm'
-              }}
-            >
-              <div
-                className="receipt-half"
-                style={{ flex: 1, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', minHeight: 0 }}
-              >
-                {renderReceiptContent('CUSTOMER COPY')}
-              </div>
-              <div
-                className="office-copy"
-                style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
-              >
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                  {renderReceiptContent('OFFICE COPY')}
-                </div>
-              </div>
+                <div
+                  ref={componentRef}
+                  className="print-container text-black font-sans bg-white"
+                  style={{
+                    width: '210mm',
+                    height: '297mm',
+                    padding: '5mm',
+                    boxSizing: 'border-box',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    gap: '10mm'
+                  }}
+                >
+                  <style type="text/css" media="print">
+                    {tailwindStyles}
+                    {`
+                      @page {
+                        size: A4 portrait;
+                        margin: 0mm !important;
+                      }
+                      html, body {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        width: 100%;
+                        height: 100%;
+                        background: white;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                      }
+                      .print-container {
+                        width: 100% !important;
+                        height: 100% !important;
+                        padding: 5mm !important;
+                        box-sizing: border-box !important;
+                        display: flex !important;
+                        flex-direction: column !important;
+                        justify-content: space-between !important;
+                        background: white !important;
+                      }
+                      .receipt-half {
+                        flex: 1 !important;
+                        box-sizing: border-box !important;
+                        display: flex !important;
+                        flex-direction: column !important;
+                        min-height: 0 !important;
+                      }
+                      .receipt-border {
+                        border: 3px solid black !important;
+                        border-radius: 8px !important;
+                        flex: 1 !important;
+                        padding: 3mm !important;
+                        position: relative !important;
+                        box-sizing: border-box !important;
+                        overflow: hidden !important;
+                        min-height: 0 !important;
+                      }
+                      .office-copy {
+                        display: flex !important;
+                        flex-direction: column !important;
+                        flex: 1 !important;
+                        min-height: 0 !important;
+                      }
+                    `}
+                  </style>
 
-            </div>
+                  <div className="receipt-half" style={{ flex: 1, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                    {renderReceiptContent('CUSTOMER COPY')}
+                  </div>
+                  <div className="office-copy" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                      {renderReceiptContent('OFFICE COPY')}
+                    </div>
+                  </div>
+
+                </div>
               </div>
             </div>
           </div>

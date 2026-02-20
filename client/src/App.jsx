@@ -9,6 +9,7 @@ import SuzukiGatePass from "./SuzukiGatePass";
 import DpReceipt from "./DpReceipt";
 import Receipt from "./components/Receipt"; 
 import Verify from "./ReqFetch/Verify";
+import PriceList from "./components/PriceList";
 import UserProfile from "./components/UserProfile";
 import AdminPanel from "./components/AdminPanel"; 
 
@@ -115,7 +116,7 @@ function App() {
   }
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${isDark ? "bg-gray-900" : "bg-blue-50"}`}>
+    <div className={`h-screen w-screen overflow-hidden flex flex-col transition-colors duration-300 ${isDark ? "bg-gray-900" : "bg-blue-50"}`}>
       
       {/* GLOBAL TOAST CONTAINER */}
       <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none">
@@ -127,26 +128,51 @@ function App() {
           ))}
       </div>
 
-      <Navbar 
-        activePage={activePage} 
-        setActivePage={setActivePage} 
-        theme={theme} 
-        toggleTheme={toggleTheme}
-        onLogout={handleLogout}
-        userRole={userRole}
-      />
+      <div className="flex-none relative h-16 w-full z-50">
+        <Navbar 
+          activePage={activePage} 
+          setActivePage={setActivePage} 
+          theme={theme} 
+          toggleTheme={toggleTheme}
+          onLogout={handleLogout}
+          userRole={userRole}
+        />
+      </div>
 
-      <div className="pt-20 pb-10">
-        {activePage === "receipt" && <Receipt theme={theme} />} 
-        {activePage === "verify" && <Verify theme={theme} />}
-        {activePage === "gatepass" && <SuzukiGatePass theme={theme} />}
-        {activePage === "dp_receipt" && <DpReceipt theme={theme} />}
-        {activePage === "vahan" && <VahanConverter theme={theme} />}
-        {activePage === "dms" && <DMSNames theme={theme} />}
-        {activePage === "attendance" && <AttendanceApp theme={theme} />}
-        {activePage === "info" && <InfoPage theme={theme} />}
-        {activePage === "profile" && <UserProfile theme={theme} />}
-        {activePage === "admin" && userRole === 'admin' && <AdminPanel theme={theme} />}
+      <div className="flex-1 w-full relative overflow-hidden">
+        <div className={`absolute inset-0 overflow-y-auto ${activePage === "receipt" ? "block" : "hidden"}`}>
+          <Receipt theme={theme} />
+        </div>
+        <div className={`absolute inset-0 overflow-y-auto ${activePage === "verify" ? "block" : "hidden"}`}>
+          <Verify theme={theme} />
+        </div>
+        <div className={`absolute inset-0 overflow-hidden ${activePage === "pricelist" ? "block" : "hidden"}`}>
+          <PriceList theme={theme} isActive={activePage === "pricelist"} />
+        </div>
+        <div className={`absolute inset-0 overflow-y-auto ${activePage === "gatepass" ? "block" : "hidden"}`}>
+          <SuzukiGatePass theme={theme} />
+        </div>
+        <div className={`absolute inset-0 overflow-y-auto ${activePage === "dp_receipt" ? "block" : "hidden"}`}>
+          <DpReceipt theme={theme} />
+        </div>
+        <div className={`absolute inset-0 overflow-y-auto ${activePage === "vahan" ? "block" : "hidden"}`}>
+          <VahanConverter theme={theme} />
+        </div>
+        <div className={`absolute inset-0 overflow-y-auto ${activePage === "dms" ? "block" : "hidden"}`}>
+          <DMSNames theme={theme} />
+        </div>
+        <div className={`absolute inset-0 overflow-y-auto ${activePage === "attendance" ? "block" : "hidden"}`}>
+          <AttendanceApp theme={theme} />
+        </div>
+        <div className={`absolute inset-0 overflow-y-auto ${activePage === "info" ? "block" : "hidden"}`}>
+          <InfoPage theme={theme} />
+        </div>
+        <div className={`absolute inset-0 overflow-y-auto ${activePage === "profile" ? "block" : "hidden"}`}>
+          <UserProfile theme={theme} />
+        </div>
+        <div className={`absolute inset-0 overflow-y-auto ${activePage === "admin" ? "block" : "hidden"}`}>
+          {userRole === 'admin' && <AdminPanel theme={theme} />}
+        </div>
       </div>
     </div>
   );
