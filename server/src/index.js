@@ -13,6 +13,7 @@ import attendanceRoutes from './routes/attendance.js';
 import generalReceiptRoutes from './routes/general_receipts.js';
 import adminRoutes from './routes/admin.js'; 
 import pricelistRoutes from './routes/pricelist.js';
+import portalRoutes from './routes/portal.js';
 
 import { verifyToken, checkRole } from './middleware/auth.js';
 
@@ -21,8 +22,21 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 5000;
 
+// Allow multiple origins for CORS (Main Client + External Portal)
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  process.env.PORTAL_URL 
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CLIENT_URL, 
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl requests) or allowed origins
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }, 
   credentials: true 
 }));
 
@@ -40,6 +54,9 @@ app.use('/api/attendance', verifyToken, attendanceRoutes);
 app.use('/api/general-receipts', verifyToken, generalReceiptRoutes);
 app.use('/api/pricelist', verifyToken, pricelistRoutes);
 
+// External Portal Read-Only Route
+app.use('/api/portal', verifyToken, portalRoutes);
+
 // Admin Routes (Protected + Role Check)
 app.use('/api/admin', verifyToken, checkRole('admin'), adminRoutes);
 
@@ -47,7 +64,7 @@ app.use('/api/admin', verifyToken, checkRole('admin'), adminRoutes);
 app.get('/', async (req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.send(`Value Suzuki Server Running. Database Status: OK`);
+    res.send(`Value One Server Running. Database Status: OK`);
   } catch (err) {
     res.status(500).send(`Server Running but DB Connection Failed`);
   }

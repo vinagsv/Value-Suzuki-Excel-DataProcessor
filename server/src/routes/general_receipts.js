@@ -97,7 +97,7 @@ router.get('/customer-history/:fileNo', async (req, res) => {
 
     try {
         const result = await pool.query(`
-            SELECT receipt_no, date, payment_type, amount, payment_mode, status, customer_name, model, hp_financier
+            SELECT receipt_no, date, payment_type, amount, payment_mode, status, customer_name, mobile, model, hp_financier
             FROM general_receipts 
             WHERE file_no = $1 AND (status IS DISTINCT FROM 'CANCELLED')
             ORDER BY date DESC

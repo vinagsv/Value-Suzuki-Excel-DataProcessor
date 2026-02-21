@@ -37,6 +37,7 @@ const Receipt = ({ theme }) => {
 
   const [formData, setFormData] = useState(initialForm);
   const [filePrefix, setFilePrefix] = useState('');
+  const [currentFilePrefix, setCurrentFilePrefix] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [history, setHistory] = useState([]); 
   const [availableMonths, setAvailableMonths] = useState([]);
@@ -62,6 +63,7 @@ const Receipt = ({ theme }) => {
       
       const data = await res.json();
       setFilePrefix(data.prefix || '');
+      setCurrentFilePrefix(data.prefix || '');
       setFormData(prev => ({ 
           ...prev, 
           receiptNo: String(data.nextReceiptNo || '---'),
@@ -128,7 +130,7 @@ const Receipt = ({ theme }) => {
     let rawInput = e.target.value;
     setFormData(prev => ({ ...prev, fileNoSeq: rawInput }));
 
-    const cleanCombined = (filePrefix + rawInput).replace(/\s/g, '');
+    const cleanCombined = (currentFilePrefix + rawInput).replace(/\s/g, '');
     
     if (Array.isArray(history) && rawInput.length >= 3) {
       const match = history.find(item => 
@@ -180,9 +182,25 @@ const Receipt = ({ theme }) => {
     if (serverError) return alert("System is offline. Cannot edit receipts.");
 
     let loadedSeq = item.file_no || '';
-    if (filePrefix && loadedSeq.startsWith(filePrefix)) {
-        loadedSeq = loadedSeq.substring(filePrefix.length);
+    let loadedPrefix = filePrefix; // Default to global
+
+    if (loadedSeq) {
+        if (filePrefix && loadedSeq.startsWith(filePrefix)) {
+            loadedPrefix = filePrefix;
+            loadedSeq = loadedSeq.substring(filePrefix.length);
+        } else {
+            // Intelligently split unknown/old prefixes
+            const match = loadedSeq.match(/^(.*?)(\d+)$/);
+            if (match) {
+                loadedPrefix = match[1];
+                loadedSeq = match[2];
+            } else {
+                loadedPrefix = '';
+            }
+        }
     }
+
+    setCurrentFilePrefix(loadedPrefix);
 
     setFormData({
         receiptNo: item.receipt_no,
@@ -221,7 +239,7 @@ const Receipt = ({ theme }) => {
     }
 
     const dataToSave = dataOverride || formData;
-    let finalFileNo = filePrefix + dataToSave.fileNoSeq.trim();
+    let finalFileNo = currentFilePrefix + dataToSave.fileNoSeq.trim();
 
     const method = isEditing ? 'PUT' : 'POST';
     const finalPaymentType = dataToSave.paymentType === 'Other' ? dataToSave.customPaymentType : dataToSave.paymentType;
@@ -319,7 +337,7 @@ const Receipt = ({ theme }) => {
     : 'ZERO ONLY';
 
   const hasValue = (val) => val && val.trim().length > 0;
-  const fullFileNo = filePrefix + formData.fileNoSeq;
+  const fullFileNo = currentFilePrefix + formData.fileNoSeq;
 
   const inputClass = `w-full p-1.5 rounded border text-sm ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"} focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed`;
   const labelClass = `block text-[10px] font-bold uppercase mb-0.5 ${isDark ? "text-gray-400" : "text-gray-600"}`;
@@ -328,7 +346,7 @@ const Receipt = ({ theme }) => {
 
   const renderReceiptContent = (copyTitle) => (
     <div className="flex flex-col h-full relative">
-        <div className="text-right font-bold text-xs uppercase mb-1 tracking-widest text-gray-500 pr-1">
+        <div className="text-right font-bold text-[10px] uppercase mb-0.5 tracking-widest text-gray-500 pr-1">
           {copyTitle}
         </div>
 
@@ -346,56 +364,56 @@ const Receipt = ({ theme }) => {
             <img src="/suzuki-logo.png" alt="" className="w-2/3" />
           </div>
 
-          <div className="flex justify-between items-start mb-1 relative z-10">
+          <div className="flex justify-between items-start mb-0.5 relative z-10">
               <div className="w-[45%]">
-                <img src="/suzuki-logo.png" alt="Suzuki" style={{width:'200px'}} />
-                <div className="text-sm font-bold mt-1">GST NO: 29AACCV2521J1ZA</div>
+                <img src="/suzuki-logo.png" alt="Suzuki" style={{width:'180px'}} />
+                <div className="text-xs font-bold mt-0.5">GST NO: 29AACCV2521J1ZA</div>
               </div>
               <div className="w-[55%] text-right">
-                    <h1 className="text-2xl font-bold uppercase leading-tight">VALUE MOTOR AGENCY PVT LTD</h1>
-                    <p className="text-xs font-bold mt-1">#16/A, MILLERS ROAD, VASANTH NAGAR, BANGALORE - 52</p>
-                    <p className="text-xs font-bold">Mob: 9845906084 | Email: millers_road_suzuki@yahoo.com</p>
+                    <h1 className="text-xl font-bold uppercase leading-tight">VALUE MOTOR AGENCY PVT LTD</h1>
+                    <p className="text-[10px] font-bold mt-0.5">#16/A, MILLERS ROAD, VASANTH NAGAR, BANGALORE - 52</p>
+                    <p className="text-[10px] font-bold">Mob: 9845906084 | Email: millers_road_suzuki@yahoo.com</p>
               </div> 
           </div>
 
-          <div className="flex justify-center mb-2">
-            <div className="border-b-2 border-black w-full text-center py-1">
-              <span className="text-3xl font-bold uppercase tracking-[0.2em]">RECEIPT</span>
+          <div className="flex justify-center mb-1">
+            <div className="border-b-2 border-black w-full text-center pb-0.5">
+              <span className="text-2xl font-bold uppercase tracking-[0.2em]">RECEIPT</span>
             </div>
           </div>
 
-          <div className="flex justify-between items-center mb-3 text-base font-bold relative z-10">
-            <div>NO: <span className="text-red-600 text-2xl ml-2">{formData.receiptNo}</span></div>
+          <div className="flex justify-between items-center mb-1.5 text-sm font-bold relative z-10">
+            <div>NO: <span className="text-red-600 text-xl ml-2">{formData.receiptNo}</span></div>
             
-            <div className="flex items-center gap-8">
+            <div className="flex items-center gap-6">
                 {hasValue(fullFileNo) && (
-                    <div className="text-base font-bold text-gray-800">
+                    <div className="text-sm font-bold text-gray-800">
                         File Number: <span className="ml-1">{fullFileNo}</span>
                     </div>
                 )}
-                <div>DATE: <span className="ml-2 text-xl">{formatDate(formData.date)}</span></div>
+                <div>DATE: <span className="ml-2 text-lg">{formatDate(formData.date)}</span></div>
             </div>
           </div>
 
-          <div className="flex flex-col flex-grow justify-between text-sm leading-snug relative z-10 px-1">
+          <div className="flex flex-col flex-grow justify-between text-xs leading-snug relative z-10 px-1 py-1">
               
               <div className="flex items-end mb-1">
-                <span className="font-bold mr-2 whitespace-nowrap text-sm">RECEIVED WITH THANKS FROM:</span>
-                <span className="border-b border-dotted border-black flex-grow px-2 font-bold text-xl uppercase">{formData.customerName}</span>
+                <span className="font-bold mr-2 whitespace-nowrap">RECEIVED WITH THANKS FROM:</span>
+                <span className="border-b border-dotted border-black flex-grow px-2 font-bold text-lg uppercase">{formData.customerName}</span>
               </div>
 
               {(hasValue(formData.mobile) || hasValue(formData.model)) && (
                 <div className="flex items-end mb-1 w-full gap-4">
                     {hasValue(formData.mobile) && (
                       <div className="flex items-end w-1/2">
-                        <span className="font-bold mr-2 whitespace-nowrap text-sm">MOBILE NO:</span>
-                        <span className="border-b border-dotted border-black flex-grow px-2 font-bold text-xl">{formData.mobile}</span>
+                        <span className="font-bold mr-2 whitespace-nowrap">MOBILE NO:</span>
+                        <span className="border-b border-dotted border-black flex-grow px-2 font-bold text-base">{formData.mobile}</span>
                       </div>
                     )}
                     {hasValue(formData.model) && (
                       <div className="flex items-end w-1/2">
-                        <span className="font-bold mr-2 whitespace-nowrap text-sm">MODEL:</span>
-                        <span className="border-b border-dotted border-black flex-grow px-2 font-bold text-xl uppercase">{formData.model}</span>
+                        <span className="font-bold mr-2 whitespace-nowrap">MODEL:</span>
+                        <span className="border-b border-dotted border-black flex-grow px-2 font-bold text-base uppercase">{formData.model}</span>
                       </div>
                     )}
                 </div>
@@ -405,47 +423,47 @@ const Receipt = ({ theme }) => {
                 <div className="flex items-end mb-1 w-full gap-4">
                   {hasValue(formData.hp) && (
                     <div className="flex items-end w-1/2">
-                        <span className="font-bold mr-2 whitespace-nowrap text-sm">H.P. TO:</span>
-                        <span className="border-b border-dotted border-black flex-grow px-2 font-bold text-lg uppercase">{formData.hp}</span>
+                        <span className="font-bold mr-2 whitespace-nowrap">H.P. TO:</span>
+                        <span className="border-b border-dotted border-black flex-grow px-2 font-bold text-sm uppercase">{formData.hp}</span>
                     </div>
                   )}
                   {hasValue(formData.gstNo) && (
                     <div className="flex items-end w-1/2">
-                        <span className="font-bold mr-2 whitespace-nowrap text-sm">GST NO:</span>
-                        <span className="border-b border-dotted border-black flex-grow px-2 font-bold text-lg uppercase">{formData.gstNo}</span>
+                        <span className="font-bold mr-2 whitespace-nowrap">GST NO:</span>
+                        <span className="border-b border-dotted border-black flex-grow px-2 font-bold text-sm uppercase">{formData.gstNo}</span>
                     </div>
                   )}
                 </div>
               )}
 
               <div className="flex flex-col mb-1">
-                <span className="font-bold whitespace-nowrap text-xs mb-1">THE SUM OF RUPEES:</span>
-                <div className="border-b border-dotted border-black px-2 font-bold text-xl italic uppercase break-words leading-tight min-h-[2rem] flex items-end">
+                <span className="font-bold whitespace-nowrap text-[10px] mb-0.5">THE SUM OF RUPEES:</span>
+                <div className="border-b border-dotted border-black px-2 font-bold text-base italic uppercase break-words leading-tight min-h-[1.5rem] flex items-end">
                     {amountInWords}
                 </div>
               </div>
 
               <div className="flex items-end mb-1">
-                    <span className="font-bold mr-2 whitespace-nowrap text-sm">ON ACCOUNT OF:</span>
-                    <span className="border-b border-dotted border-black px-4 font-bold text-xl uppercase">
+                    <span className="font-bold mr-2 whitespace-nowrap">ON ACCOUNT OF:</span>
+                    <span className="border-b border-dotted border-black px-4 font-bold text-base uppercase">
                       {formData.paymentType === 'Other' ? formData.customPaymentType : formData.paymentType}
                     </span>
               </div>
           </div>
 
-          <div className="mt-2 flex items-end justify-between relative z-10">
-            <div className="flex flex-col gap-1">
+          <div className="mt-1 flex items-end justify-between relative z-10">
+            <div className="flex flex-col gap-0.5">
               <div className="flex items-center gap-3">
-                <div className="border-2 border-black px-4 py-2 text-2xl font-bold bg-gray-50 whitespace-nowrap">
+                <div className="border-2 border-black px-3 py-1.5 text-xl font-bold bg-gray-50 whitespace-nowrap">
                     ₹ {Number(formData.amount).toLocaleString('en-IN')}/-
                 </div>
-                <div className="italic font-bold text-sm mt-2 whitespace-nowrap">
+                <div className="italic font-bold text-xs mt-1 whitespace-nowrap">
                     by way of {formData.paymentMode}
                 </div>
               </div>
 
               {(hasValue(formData.chequeNo) || hasValue(formData.dated)) && (
-                <div className="flex flex-col text-xs font-semibold gap-0.5 mt-1">
+                <div className="flex flex-col text-[11px] font-semibold gap-0 mt-0.5">
                   {hasValue(formData.chequeNo) && (
                     <div className="italic">
                       Cheque/Ref No: <span className="font-bold">{formData.chequeNo}</span>
@@ -461,18 +479,18 @@ const Receipt = ({ theme }) => {
             </div>
             
             <div className="text-center">
-                <div className="text-xs mb-8"> 
-                    <span className="font-medium">For</span> <span className="font-bold uppercase text-sm">VALUE MOTOR AGENCY PVT LTD</span>
+                <div className="text-[10px] mb-5"> 
+                    <span className="font-medium">For</span> <span className="font-bold uppercase text-xs">VALUE MOTOR AGENCY PVT LTD</span>
                 </div>
-                <div className="text-xs border-t border-black inline-block px-6 pt-1 font-bold">Authorised Signatory</div>
+                <div className="text-[10px] border-t border-black inline-block px-6 pt-1 font-bold">Authorised Signatory</div>
             </div>
           </div>
 
-          <div className="mt-2 pt-1 border-t-2 border-gray-400">
-            <div className="text-[10px] font-bold text-gray-800 uppercase leading-tight">
+          <div className="mt-1 pt-1 border-t-2 border-gray-400">
+            <div className="text-[9px] font-bold text-gray-800 uppercase leading-tight">
                 WE BANK WITH STATE BANK OF INDIA | A/C NO: 32744599339 | IFSC: SBIN0021882 |  BRANCH: VASANTHNAGAR
             </div>
-            <div className="text-[9px] font-extrabold text-black uppercase mt-1">
+            <div className="text-[8px] font-extrabold text-black uppercase mt-0.5">
                 NOTE: CHEQUES SUBJECT TO REALISATION. PRICES PREVAILING AT THE TIME OF DELIVERY APPLICABLE. ANY CANCELLATION SUBJECT TO 10% DEDUCTION.
             </div>
           </div>
@@ -564,7 +582,7 @@ const Receipt = ({ theme }) => {
                      <label className={labelClass}>File No</label>
                      <div className="flex shadow-sm rounded border overflow-hidden">
                         <span className={`px-2 py-1.5 text-xs font-mono font-bold flex items-center justify-center ${isDark ? 'bg-gray-600 border-gray-500 text-gray-300' : 'bg-gray-100 border-gray-300 text-gray-500'} select-none`}>
-                            {filePrefix}
+                            {currentFilePrefix}
                         </span>
                         <input 
                            name="fileNoSeq" 
