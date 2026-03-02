@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { Printer, Search, FileSpreadsheet, Edit3, XCircle, WifiOff, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import tailwindStyles from './index.css?inline';
+import tailwindStyles from '../index.css?inline';
 
 const API_URL = import.meta.env.VITE_API_URL;
 

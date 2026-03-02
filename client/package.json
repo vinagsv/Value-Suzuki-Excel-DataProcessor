@@ -12,7 +12,10 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.1.16",
     "axios": "^1.13.1",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
     "lucide-react": "^0.552.0",
+    "multer": "^2.1.0",
     "papaparse": "^5.5.3",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

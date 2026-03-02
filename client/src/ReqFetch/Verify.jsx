@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { Search, RefreshCw, FileText, User, Database, Globe } from "lucide-react";
-import Calculator from "../components/Calculator";
 
 const FontStyle = () => (
   <style>{`
@@ -46,7 +45,6 @@ const FontStyle = () => (
     .v-tables-row { flex: 1; min-height: 250px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
     .v-table-wrap { flex: 1; overflow: auto; max-height: 400px; } table.v-table { width: 100%; border-collapse: collapse; } table.v-table thead th { position: sticky; top: 0; z-index: 10; padding: 11px 16px; background: #f8f9fb; font-family: 'Syne', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border-dim); white-space: nowrap; text-align: left; } table.v-table tbody tr { transition: background 0.15s; border-bottom: 1px solid var(--border-dim); } table.v-table tbody tr:hover { background: var(--bg-hover); } table.v-table td { padding: 12px 16px; font-size: 13px; vertical-align: middle; }
     .v-table-empty { padding: 30px; text-align: center; color: var(--text-muted); font-size: 13px; }
-    .v-sidebar { width: 300px; flex: none; display: flex; flex-direction: column; border-left: 1px solid var(--border-dim); background: var(--bg-surface); box-shadow: -1px 0 4px rgba(0,0,0,0.04); }
     @keyframes spin { to { transform: rotate(360deg); } } .animate-spin { animation: spin 1s linear infinite; }
   `}</style>
 );
@@ -353,10 +351,6 @@ const Verify = ({ theme }) => {
               </>
             ) : <div className="v-empty"><div className="v-empty-icon-wrap"><Search size={34}/></div><h2>Enter a File Number to Begin</h2></div>}
           </main>
-
-          <aside className="v-sidebar">
-             <Calculator theme={theme} />
-          </aside>
         </div>
       </div>
     </>

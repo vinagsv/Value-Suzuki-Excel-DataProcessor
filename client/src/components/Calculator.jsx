@@ -6,21 +6,26 @@ const Calculator = ({ theme }) => {
     const [calcInput, setCalcInput] = useState("");
     const [calcResult, setCalcResult] = useState("");
     const [calcHistory, setCalcHistory] = useState([]);
+    const [selectedIndex, setSelectedIndex] = useState(-1);
 
     const solveCalc = () => {
         try {
-            // Strip out everything except numbers and math operators for safety
-            const sanitized = calcInput.replace(/[^0-9+\-*/().]/g, '');
+            // Strip out everything except numbers, math operators, braces, and percentage
+            const sanitized = calcInput.replace(/[^0-9+\-*/().%]/g, '');
             if(!sanitized) return;
             
+            // Replace % with /100 so the JS evaluator can process it logically
+            const evalStr = sanitized.replace(/%/g, '/100');
+            
             // eslint-disable-next-line no-new-func
-            const res = new Function('return ' + sanitized)();
+            const res = new Function('return ' + evalStr)();
             
             if(res !== undefined && !isNaN(res)) {
                 // Update Result and History
                 setCalcResult(res.toString());
                 setCalcHistory(prev => [{ input: sanitized, result: res.toString() }, ...prev]);
                 setCalcInput("");
+                setSelectedIndex(-1); // Reset selection
             }
         } catch {
             setCalcResult("Error");
@@ -31,6 +36,34 @@ const Calculator = ({ theme }) => {
         setCalcInput("");
         setCalcResult("");
         setCalcHistory([]);
+        setSelectedIndex(-1);
+    };
+
+    const handleKeyDown = (e) => {
+        const totalItems = calcHistory.length * 2; // Each history entry has an input and a result
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setSelectedIndex(prev => (prev < totalItems - 1 ? prev + 1 : prev));
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setSelectedIndex(prev => (prev > -1 ? prev - 1 : -1));
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (selectedIndex > -1) {
+                // Determine if selected index points to an expression (even) or a result (odd)
+                const histIdx = Math.floor(selectedIndex / 2);
+                const isResult = selectedIndex % 2 === 1;
+                const valueToInsert = isResult ? calcHistory[histIdx].result : calcHistory[histIdx].input;
+                
+                setCalcInput(valueToInsert);
+                setSelectedIndex(-1); // Reset selection after picking
+            } else {
+                solveCalc();
+            }
+        } else if (e.key === 'Escape') {
+            setSelectedIndex(-1);
+        }
     };
 
     return (
@@ -49,9 +82,12 @@ const Calculator = ({ theme }) => {
                 <input
                     type="text"
                     value={calcInput}
-                    onChange={(e) => setCalcInput(e.target.value)}
-                    onKeyDown={(e) => { if(e.key === 'Enter') solveCalc(); }}
-                    placeholder="E.g. 1500 + 350 - 50"
+                    onChange={(e) => {
+                        setCalcInput(e.target.value);
+                        setSelectedIndex(-1);
+                    }}
+                    onKeyDown={handleKeyDown}
+                    placeholder="E.g. (1500 + 350) * 10%"
                     className={`flex-none w-full h-14 px-4 rounded-xl font-mono text-lg border-2 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all ${
                         isDark ? 'bg-gray-800 border-gray-700 text-white focus:border-blue-500' : 'bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500'
                     }`}
@@ -74,12 +110,35 @@ const Calculator = ({ theme }) => {
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {calcHistory.map((item, idx) => (
-                                <div key={idx} className={`text-right border-b pb-2 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                                    <div className={`text-xs font-mono mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{item.input} =</div>
-                                    <div className={`text-base font-bold font-mono ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>{item.result}</div>
-                                </div>
-                            ))}
+                            {calcHistory.map((item, idx) => {
+                                const inputIdx = idx * 2;
+                                const resultIdx = idx * 2 + 1;
+
+                                return (
+                                    <div key={idx} className={`text-right border-b pb-2 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                                        <div className="mb-1">
+                                            <div 
+                                                onClick={() => { setCalcInput(item.input); setSelectedIndex(-1); }}
+                                                className={`text-xs font-mono cursor-pointer inline-block rounded px-2 py-0.5 transition-colors ${
+                                                    isDark ? 'text-gray-400' : 'text-gray-500'
+                                                } ${selectedIndex === inputIdx ? (isDark ? 'bg-blue-500/30 text-blue-300 ring-1 ring-blue-500/50' : 'bg-blue-100 text-blue-700 ring-1 ring-blue-300') : 'hover:opacity-70'}`}
+                                            >
+                                                {item.input} =
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div 
+                                                onClick={() => { setCalcInput(item.result); setSelectedIndex(-1); }}
+                                                className={`text-base font-bold font-mono cursor-pointer inline-block rounded px-2 py-0.5 transition-colors ${
+                                                    isDark ? 'text-gray-200' : 'text-gray-700'
+                                                } ${selectedIndex === resultIdx ? (isDark ? 'bg-blue-500/40 text-blue-200 ring-1 ring-blue-500/50' : 'bg-blue-200 text-blue-800 ring-1 ring-blue-400') : 'hover:opacity-70'}`}
+                                            >
+                                                {item.result}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
                 </div>

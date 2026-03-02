@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import Calculator from './Calculator';
 import { Loader2, FileText, Printer, AlertTriangle } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -67,7 +66,7 @@ const PriceList = ({ theme, isActive }) => {
                         </div>
                         <div>
                             <h1 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>Price List</h1>
-                           
+                            
                         </div>
                     </div>
 
@@ -113,12 +112,6 @@ const PriceList = ({ theme, isActive }) => {
                     )}
                 </div>
             </main>
-
-            <aside className={`w-[280px] lg:w-[320px] flex-none border-l flex flex-col h-full shadow-[-1px_0_4px_rgba(0,0,0,0.04)] ${
-                isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'
-            }`}>
-                <Calculator theme={theme} />
-            </aside>
             
         </div>
     );

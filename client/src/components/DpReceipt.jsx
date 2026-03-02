@@ -3,7 +3,8 @@ import { useReactToPrint } from 'react-to-print';
 import { ToWords } from 'to-words';
 import { Printer, RefreshCw, FileSpreadsheet, Search, Edit3, XCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import tailwindStyles from './index.css?inline'; 
+// import tailwindStyles from './index.css?inline'; 
+import tailwindStyles from '../index.css?inline'; 
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -16,7 +17,25 @@ const DpReceipt = ({ theme }) => {
   const isDark = theme === 'dark';
   const componentRef = useRef(null);
   
-  const LAYOUT = { pagePadding: '20mm', logoHeight: '200', logoWidth: 'auto', logoMarginBottom: '2', logoVerticalOffset: '-73', headerMarginBottom: '8', companyNameSize: '2xl', addressTextSize: 'base', titleMarginBottom: '8', titleTextSize: 'xl', bodySpacing: '6', bodyTextSize: 'base', footerMarginTop: '32', disclaimerMarginTop: '12', amountBoxPaddingX: '6', amountBoxPaddingY: '3', amountBoxMarginLeft: '8' };
+  const LAYOUT = { 
+    pagePadding: '15mm', 
+    logoHeight: '120', 
+    logoWidth: 'auto', 
+    logoMarginBottom: '2', 
+    logoVerticalOffset: '0', 
+    headerMarginBottom: '4', 
+    companyNameSize: 'xl', 
+    addressTextSize: 'sm', 
+    titleMarginBottom: '4', 
+    titleTextSize: 'lg', 
+    bodySpacing: '4', 
+    bodyTextSize: 'base', 
+    footerMarginTop: '16', 
+    disclaimerMarginTop: '8', 
+    amountBoxPaddingX: '6', 
+    amountBoxPaddingY: '3', 
+    amountBoxMarginLeft: '8' 
+  };
 
   const initialForm = {
     receiptNo: '',
@@ -237,7 +256,7 @@ const DpReceipt = ({ theme }) => {
               <div className={`text-center mb-${LAYOUT.titleMarginBottom}`}>
                 <h2 className={`text-${LAYOUT.titleTextSize} font-bold underline decoration-2 underline-offset-4`}>RECEIPT</h2>
               </div>
-              <div className="flex justify-between mb-6 text-base font-medium">
+              <div className="flex justify-between mb-4 text-base font-medium">
                 <div><span className="font-bold mr-2">NO:</span> <span className="text-xl text-red-600 font-bold">{formData.receiptNo}</span></div>
                 <div><span className="font-bold mr-2">Date:</span> <span className="text-lg">{new Date(formData.date).toLocaleDateString('en-GB')}</span></div>
               </div>
@@ -249,20 +268,22 @@ const DpReceipt = ({ theme }) => {
                 </div>
                 <div className="block leading-loose"><span className="font-bold mr-2 align-baseline">RUPEES:</span><span className="font-medium uppercase text-lg underline decoration-dotted decoration-2 underline-offset-8 decoration-gray-400">{amountInWords}</span></div>
                 <div className="flex items-end"><span className="font-bold whitespace-nowrap mr-2">ON ACCOUNT OF:</span><span className="border-b border-dotted border-black w-48"></span></div>
-                <div className="flex items-center mt-8">
+                <div className="flex items-center mt-4">
                   <div className="border-2 border-black font-bold text-2xl" style={{ paddingLeft: `${LAYOUT.amountBoxPaddingX * 4}px`, paddingRight: `${LAYOUT.amountBoxPaddingX * 4}px`, paddingTop: `${LAYOUT.amountBoxPaddingY * 4}px`, paddingBottom: `${LAYOUT.amountBoxPaddingY * 4}px` }}>RS. {Number(formData.amount).toLocaleString('en-IN')}/-</div>
                   <div className="italic text-lg font-medium" style={{ marginLeft: `${LAYOUT.amountBoxMarginLeft * 4}px` }}>by way of Cash/Cheque/Card/Online</div>
                 </div>
-                <div className="flex flex-nowrap gap-4 mt-6 pt-6">
+                <div className="flex flex-nowrap gap-4 mt-4 pt-4">
                    <div className="flex items-end whitespace-nowrap"><span className="font-bold mr-1 text-base">NO-</span><span className="border-b border-dotted border-black w-32"></span></div>
                    <div className="flex items-end whitespace-nowrap"><span className="font-bold mr-1 text-base">-DATED-</span><span className="border-b border-dotted border-black w-32"></span></div>
                    <div className="flex items-end whitespace-nowrap"><span className="font-bold mr-1 text-base">-DRAWN ON-</span><span className="border-b border-dotted border-black w-40"></span></div>
                 </div>
               </div>
-              <div> <br /> <br /> <br /> <br /></div>
+              
+        
+
               <div className={`mt-${LAYOUT.footerMarginTop} flex justify-end`}>
                 <div className="text-center">
-                  <div className="font-bold mb-12 text-lg">For Value Motor Agency Pvt Ltd</div>
+                  <div className="font-bold mb-8 text-lg">For Value Motor Agency Pvt Ltd</div>
                   <div className="border-t border-black pt-1 px-4 inline-block text-base font-semibold">Authorised Signatory</div>
                 </div>
               </div>

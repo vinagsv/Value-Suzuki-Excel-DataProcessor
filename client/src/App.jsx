@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from "react";
 import Navbar from "./components/Navbar";
 import Login from "./Login";
-import VahanConverter from "./VahanConverter";
-import DMSNames from "./DMSNames";
-import InfoPage from "./InfoPage";
-import AttendanceApp from "./AttendanceApp";
-import SuzukiGatePass from "./SuzukiGatePass";
-import DpReceipt from "./DpReceipt";
+import VahanConverter from "./components/VahanConverter";
+import DMSNames from "./components/DMSNames";
+import InfoPage from "./components/InfoPage";
+import AttendanceApp from "./components/AttendanceApp";
+import SuzukiGatePass from "./components/SuzukiGatePass";
+import DpReceipt from "./components/DpReceipt";
 import Receipt from "./components/Receipt"; 
 import Verify from "./ReqFetch/Verify";
 import PriceList from "./components/PriceList";
 import UserProfile from "./components/UserProfile";
 import AdminPanel from "./components/AdminPanel"; 
+import XmlGenerator from "./components/XmlGenerator";
+import Calculator from "./components/Calculator";
 
 const originalFetch = window.fetch;
 window.fetch = async (...args) => {
@@ -47,6 +49,7 @@ function App() {
     return localStorage.getItem("activePage") || "gatepass";
   });
 
+  const [isCalcOpen, setIsCalcOpen] = useState(false);
   const [loginMessage, setLoginMessage] = useState("");
   const isDark = theme === "dark";
 
@@ -86,6 +89,7 @@ function App() {
   }, []);
 
   const toggleTheme = () => setTheme(isDark ? "light" : "dark");
+  const toggleCalculator = () => setIsCalcOpen(!isCalcOpen);
 
   const handleLogin = (role, email) => {
     localStorage.setItem("isLoggedIn", "true");
@@ -136,43 +140,57 @@ function App() {
           toggleTheme={toggleTheme}
           onLogout={handleLogout}
           userRole={userRole}
+          isCalcOpen={isCalcOpen}
+          toggleCalculator={toggleCalculator}
         />
       </div>
 
-      <div className="flex-1 w-full relative overflow-hidden">
-        <div className={`absolute inset-0 overflow-y-auto ${activePage === "receipt" ? "block" : "hidden"}`}>
-          <Receipt theme={theme} />
+      <div className="flex-1 w-full relative flex overflow-hidden">
+        <div className="flex-1 relative overflow-hidden">
+          <div className={`absolute inset-0 overflow-y-auto ${activePage === "receipt" ? "block" : "hidden"}`}>
+            <Receipt theme={theme} />
+          </div>
+          <div className={`absolute inset-0 overflow-y-auto ${activePage === "verify" ? "block" : "hidden"}`}>
+            <Verify theme={theme} />
+          </div>
+          <div className={`absolute inset-0 overflow-hidden ${activePage === "pricelist" ? "block" : "hidden"}`}>
+            <PriceList theme={theme} isActive={activePage === "pricelist"} />
+          </div>
+          <div className={`absolute inset-0 overflow-y-auto ${activePage === "gatepass" ? "block" : "hidden"}`}>
+            <SuzukiGatePass theme={theme} />
+          </div>
+          <div className={`absolute inset-0 overflow-y-auto ${activePage === "dp_receipt" ? "block" : "hidden"}`}>
+            <DpReceipt theme={theme} />
+          </div>
+          <div className={`absolute inset-0 overflow-y-auto ${activePage === "vahan" ? "block" : "hidden"}`}>
+            <VahanConverter theme={theme} />
+          </div>
+          <div className={`absolute inset-0 overflow-y-auto ${activePage === "dms" ? "block" : "hidden"}`}>
+            <DMSNames theme={theme} />
+          </div>
+          <div className={`absolute inset-0 overflow-y-auto ${activePage === "tally" ? "block" : "hidden"}`}>
+            <XmlGenerator theme={theme} />
+          </div>
+          <div className={`absolute inset-0 overflow-y-auto ${activePage === "attendance" ? "block" : "hidden"}`}>
+            <AttendanceApp theme={theme} />
+          </div>
+          <div className={`absolute inset-0 overflow-y-auto ${activePage === "info" ? "block" : "hidden"}`}>
+            <InfoPage theme={theme} />
+          </div>
+          <div className={`absolute inset-0 overflow-y-auto ${activePage === "profile" ? "block" : "hidden"}`}>
+            <UserProfile theme={theme} />
+          </div>
+          <div className={`absolute inset-0 overflow-y-auto ${activePage === "admin" ? "block" : "hidden"}`}>
+            {userRole === 'admin' && <AdminPanel theme={theme} />}
+          </div>
         </div>
-        <div className={`absolute inset-0 overflow-y-auto ${activePage === "verify" ? "block" : "hidden"}`}>
-          <Verify theme={theme} />
-        </div>
-        <div className={`absolute inset-0 overflow-hidden ${activePage === "pricelist" ? "block" : "hidden"}`}>
-          <PriceList theme={theme} isActive={activePage === "pricelist"} />
-        </div>
-        <div className={`absolute inset-0 overflow-y-auto ${activePage === "gatepass" ? "block" : "hidden"}`}>
-          <SuzukiGatePass theme={theme} />
-        </div>
-        <div className={`absolute inset-0 overflow-y-auto ${activePage === "dp_receipt" ? "block" : "hidden"}`}>
-          <DpReceipt theme={theme} />
-        </div>
-        <div className={`absolute inset-0 overflow-y-auto ${activePage === "vahan" ? "block" : "hidden"}`}>
-          <VahanConverter theme={theme} />
-        </div>
-        <div className={`absolute inset-0 overflow-y-auto ${activePage === "dms" ? "block" : "hidden"}`}>
-          <DMSNames theme={theme} />
-        </div>
-        <div className={`absolute inset-0 overflow-y-auto ${activePage === "attendance" ? "block" : "hidden"}`}>
-          <AttendanceApp theme={theme} />
-        </div>
-        <div className={`absolute inset-0 overflow-y-auto ${activePage === "info" ? "block" : "hidden"}`}>
-          <InfoPage theme={theme} />
-        </div>
-        <div className={`absolute inset-0 overflow-y-auto ${activePage === "profile" ? "block" : "hidden"}`}>
-          <UserProfile theme={theme} />
-        </div>
-        <div className={`absolute inset-0 overflow-y-auto ${activePage === "admin" ? "block" : "hidden"}`}>
-          {userRole === 'admin' && <AdminPanel theme={theme} />}
-        </div>
+
+        {/* GLOBAL CALCULATOR SIDEBAR */}
+        {isCalcOpen && (
+          <aside className={`w-[280px] lg:w-[320px] flex-none border-l flex flex-col h-full z-40 transition-all shadow-[-4px_0_15px_rgba(0,0,0,0.05)] ${isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'}`}>
+            <Calculator theme={theme} />
+          </aside>
+        )}
       </div>
     </div>
   );
