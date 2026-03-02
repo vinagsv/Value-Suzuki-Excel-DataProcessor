@@ -408,6 +408,272 @@ const AttendanceProvider = ({ children, theme }) => {
     loadMonthData(m, y);
   };
 
+  const getEmployeeStats = (employee) => {
+    const stats = {
+      totalPresent: 0,
+      onTime: 0,
+      halfDay: 0,
+      absent: 0,
+      late: 0,
+      earlyLeave: 0,
+      totalDays: month && year ? getDaysInMonth(month, year) : 0,
+      sundaysInMonth: 0,
+      salaryDays: 0,
+      totalLeaves: 0,
+      unpaidLeaves: 0,
+    };
+
+    if (month && year) {
+        const daysInMonth = getDaysInMonth(month, year);
+        for (let d = 1; d <= daysInMonth; d++) {
+            if (getDayOfWeek(d, month, year) === "Sun") {
+                stats.sundaysInMonth++;
+            }
+        }
+    }
+
+    let sundaysWorked = 0;
+
+    employee.attendance.forEach((record) => {
+      switch (record.status) {
+        case "P":
+          stats.totalPresent++;
+          if (!record.timeStatus?.late) stats.onTime++;
+          if (record.isSunday) sundaysWorked++;
+          break;
+        case "A":
+          if (!record.isSunday) {
+              stats.absent++;
+          }
+          break;
+        case "HLF":
+          stats.halfDay++;
+          if (record.isSunday) sundaysWorked++;
+          break;
+      }
+
+      if (record.timeStatus) {
+        if (record.timeStatus.late) stats.late++;
+        if (record.timeStatus.early) stats.earlyLeave++;
+      }
+    });
+
+    stats.absent = Math.max(0, stats.absent - sundaysWorked);
+
+    const paidLeaves = stats.sundaysInMonth + 1; 
+    const workedDays = stats.totalPresent + stats.halfDay; 
+    const calculatedSalaryDays = workedDays + paidLeaves;
+
+    stats.totalLeaves = stats.totalDays - workedDays;
+    
+    // Check if employee is absent for more than 25 days in total
+    if (stats.totalLeaves > 25) {
+      stats.salaryDays = 0;
+    } else {
+      stats.salaryDays = Math.min(calculatedSalaryDays, stats.totalDays);
+    }
+    
+    stats.unpaidLeaves = Math.max(0, stats.totalDays - stats.salaryDays);
+
+    return stats;
+  };
+
+  // Detailed report for individual employees
+  const printReports = (employeesToPrint) => {
+    if (!employeesToPrint || employeesToPrint.length === 0) return;
+
+    const printWindow = window.open("", "_blank");
+    let html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Attendance Report - ${month} ${year}</title>
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; color: #333; }
+          .page-break { page-break-after: always; }
+          .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #ddd; padding-bottom: 10px; }
+          h1 { margin: 0 0 5px 0; font-size: 24px; color: #2c3e50; }
+          .emp-info { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 14px; }
+          .emp-info div { flex: 1; }
+          .stats-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+          .stat-box { border: 1px solid #e2e8f0; padding: 10px 15px; border-radius: 6px; background: #f8fafc; font-size: 13px; flex: 1; min-width: 100px; text-align: center; }
+          .stat-box strong { display: block; font-size: 16px; color: #0f172a; margin-top: 4px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+          th, td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; }
+          th { background-color: #f1f5f9; font-weight: 600; }
+          .sunday { background-color: #fef9c3; }
+          .status-p { color: #166534; font-weight: bold; }
+          .status-a { color: #991b1b; font-weight: bold; }
+          .status-hlf { color: #854d0e; font-weight: bold; }
+          @media print {
+            body { padding: 0; }
+          }
+        </style>
+      </head>
+      <body>
+    `;
+
+    employeesToPrint.forEach((emp, index) => {
+      const stats = getEmployeeStats(emp);
+      
+      html += `
+        <div class="header">
+          <h1>Attendance Report</h1>
+          <div>${month} ${year}</div>
+        </div>
+        
+        <div class="emp-info">
+          <div>
+            <strong>Name:</strong> ${emp.name}<br/>
+            <strong>ID:</strong> ${emp.id}
+          </div>
+          <div>
+            <strong>Designation:</strong> ${emp.designation || 'N/A'}<br/>
+            <strong>Department:</strong> ${emp.department || 'N/A'}
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-box">Salary Days <strong>${stats.salaryDays}</strong></div>
+          <div class="stat-box">Present <strong>${stats.totalPresent}</strong></div>
+          <div class="stat-box">Half Days <strong>${stats.halfDay}</strong></div>
+          <div class="stat-box">Absent <strong>${stats.unpaidLeaves} / ${stats.totalLeaves}</strong></div>
+          <div class="stat-box">Late <strong>${stats.late}</strong></div>
+          <div class="stat-box">Early Leave <strong>${stats.earlyLeave}</strong></div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Day</th>
+              <th>In Time</th>
+              <th>Out Time</th>
+              <th>Working Hours</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${emp.attendance.map(record => {
+              let statusClass = '';
+              if(record.status === 'P') statusClass = 'status-p';
+              if(record.status === 'A') statusClass = 'status-a';
+              if(record.status === 'HLF') statusClass = 'status-hlf';
+
+              let inTimeExt = record.timeStatus?.late ? ' <i>(Late)</i>' : '';
+              let outTimeExt = record.timeStatus?.early ? ' <i>(Early)</i>' : '';
+
+              return `
+                <tr class="${record.isSunday ? 'sunday' : ''}">
+                  <td>${record.date}</td>
+                  <td>${record.dayOfWeek}</td>
+                  <td>${convertTo12Hour(record.inTime)}${inTimeExt}</td>
+                  <td>${convertTo12Hour(record.outTime)}${outTimeExt}</td>
+                  <td>${record.workingHours}</td>
+                  <td class="${statusClass}">${record.statusLabel}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+        ${index < employeesToPrint.length - 1 ? '<div class="page-break"></div>' : ''}
+      `;
+    });
+
+    html += `
+      <script>
+        window.onload = function() {
+          setTimeout(() => {
+            window.print();
+            window.close();
+          }, 250);
+        }
+      </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
+  // Brief summary report for all employees
+  const printSummaryReport = (employeesToPrint) => {
+    if (!employeesToPrint || employeesToPrint.length === 0) return;
+
+    const printWindow = window.open("", "_blank");
+    let html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Attendance Summary - ${month} ${year}</title>
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; color: #333; }
+          .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #ddd; padding-bottom: 10px; }
+          h1 { margin: 0 0 5px 0; font-size: 24px; color: #2c3e50; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; }
+          th, td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; }
+          th { background-color: #f1f5f9; font-weight: 600; color: #334155; }
+          tr:nth-child(even) { background-color: #f8fafc; }
+          @media print {
+            body { padding: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Attendance Summary Report</h1>
+          <div style="font-size: 16px; font-weight: bold;">${month} ${year}</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Employee Name</th>
+              <th>ID</th>
+              <th>Salary Days</th>
+              <th>Total Present</th>
+              <th>Half Day</th>
+              <th>Absent (Unpaid/Total)</th>
+              <th>Late Arrivals</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    employeesToPrint.forEach(emp => {
+      const stats = getEmployeeStats(emp);
+      html += `
+        <tr>
+          <td style="font-weight: 600;">${emp.name}</td>
+          <td>${emp.id}</td>
+          <td style="font-weight: bold; color: #4338ca;">${stats.salaryDays}</td>
+          <td style="color: #16a34a; font-weight: 600;">${stats.totalPresent}</td>
+          <td style="color: #ca8a04; font-weight: 600;">${stats.halfDay}</td>
+          <td style="color: #dc2626; font-weight: 600;">${stats.unpaidLeaves} / ${stats.totalLeaves}</td>
+          <td style="color: #ea580c; font-weight: 600;">${stats.late}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+          </tbody>
+        </table>
+        <script>
+          window.onload = function() {
+            setTimeout(() => {
+              window.print();
+              window.close();
+            }, 250);
+          }
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   const value = {
     employees,
     setEmployees,
@@ -429,6 +695,9 @@ const AttendanceProvider = ({ children, theme }) => {
     isLoadingDefault,
     theme,
     isDark,
+    getEmployeeStats,
+    printReports,
+    printSummaryReport,
     getStatusColor: (status) => {
       switch (status) {
         case "P":
@@ -440,69 +709,6 @@ const AttendanceProvider = ({ children, theme }) => {
         default:
           return isDark ? "bg-gray-800 text-gray-400 border-gray-700" : "bg-gray-100 text-gray-600 border-gray-300";
       }
-    },
-    getEmployeeStats: (employee) => {
-      const stats = {
-        totalPresent: 0,
-        onTime: 0,
-        halfDay: 0,
-        absent: 0,
-        late: 0,
-        earlyLeave: 0,
-        totalDays: month && year ? getDaysInMonth(month, year) : 0,
-        sundaysInMonth: 0,
-        salaryDays: 0,
-        totalLeaves: 0,
-        unpaidLeaves: 0,
-      };
-
-      if (month && year) {
-          const daysInMonth = getDaysInMonth(month, year);
-          for (let d = 1; d <= daysInMonth; d++) {
-             if (getDayOfWeek(d, month, year) === "Sun") {
-                 stats.sundaysInMonth++;
-             }
-          }
-      }
-
-      let sundaysWorked = 0;
-
-      employee.attendance.forEach((record) => {
-        switch (record.status) {
-          case "P":
-            stats.totalPresent++;
-            if (!record.timeStatus?.late) stats.onTime++;
-            if (record.isSunday) sundaysWorked++;
-            break;
-          case "A":
-            if (!record.isSunday) {
-                stats.absent++;
-            }
-            break;
-          case "HLF":
-            stats.halfDay++;
-            if (record.isSunday) sundaysWorked++;
-            break;
-        }
-
-        if (record.timeStatus) {
-          if (record.timeStatus.late) stats.late++;
-          if (record.timeStatus.early) stats.earlyLeave++;
-        }
-      });
-
-      stats.absent = Math.max(0, stats.absent - sundaysWorked);
-
-      const paidLeaves = stats.sundaysInMonth + 1; 
-      const workedDays = stats.totalPresent + stats.halfDay; 
-      const calculatedSalaryDays = workedDays + paidLeaves;
-
-      stats.salaryDays = Math.min(calculatedSalaryDays, stats.totalDays);
-      
-      stats.totalLeaves = stats.totalDays - workedDays;
-      stats.unpaidLeaves = Math.max(0, stats.totalDays - stats.salaryDays);
-
-      return stats;
     },
   };
 
@@ -526,6 +732,7 @@ const Dashboard = () => {
     getDaysInMonth,
     isLoadingDefault,
     getEmployeeStats,
+    printSummaryReport,
     isDark
   } = useContext(AttendanceContext);
   
@@ -647,11 +854,21 @@ const Dashboard = () => {
                   }`}
                 />
               </div>
-              {month && year && (
-                <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Total Working Days: {getDaysInMonth(month, year)}
-                </div>
-              )}
+              
+              <div className="flex flex-col items-end gap-2">
+                {month && year && (
+                  <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Total Working Days: {getDaysInMonth(month, year)}
+                  </div>
+                )}
+                <button
+                  onClick={() => printSummaryReport(filteredEmployees)}
+                  className={`px-4 py-2 text-sm rounded-lg text-white font-semibold shadow transition ${isDark ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-indigo-500 hover:bg-indigo-600'}`}
+                >
+                  🖨️ Print All Reports
+                </button>
+              </div>
+
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[800px]">
@@ -767,6 +984,7 @@ const Detail = () => {
     getEmployeeStats,
     getStatusColor,
     convertTo12Hour,
+    printReports,
     isDark
   } = useContext(AttendanceContext);
   const navigate = useNavigate();
@@ -849,30 +1067,40 @@ const Detail = () => {
 
           <div className="lg:col-span-3">
             <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white'} border shadow-xl rounded-2xl p-6 transition-colors duration-300`}>
-              <div className="mb-6">
-                <h2 className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-800'} mb-1`}>
-                  Detailed Attendance
-                </h2>
-                <h3 className={`text-xl font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'} mb-2`}>
-                  {selectedEmployee.name}
-                </h3>
-                <div className={`space-y-1 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                  <div>
-                    <span className={`font-semibold ${isDark ? 'text-gray-300' : 'text-gray-800'}`}>Employee ID:</span>{" "}
-                    {selectedEmployee.id}
-                  </div>
-                  <div>
-                    <span className={`font-semibold ${isDark ? 'text-gray-300' : 'text-gray-800'}`}>Designation:</span>{" "}
-                    {selectedEmployee.designation}
-                  </div>
-                  <div>
-                    <span className={`font-semibold ${isDark ? 'text-gray-300' : 'text-gray-800'}`}>Department:</span>{" "}
-                    {selectedEmployee.department}
-                  </div>
-                  <div>
-                    <span className={`font-semibold ${isDark ? 'text-gray-300' : 'text-gray-800'}`}>Month:</span> {month} {year}
+              
+              <div className="mb-6 flex justify-between items-start">
+                <div>
+                  <h2 className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-800'} mb-1`}>
+                    Detailed Attendance
+                  </h2>
+                  <h3 className={`text-xl font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'} mb-2`}>
+                    {selectedEmployee.name}
+                  </h3>
+                  <div className={`space-y-1 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    <div>
+                      <span className={`font-semibold ${isDark ? 'text-gray-300' : 'text-gray-800'}`}>Employee ID:</span>{" "}
+                      {selectedEmployee.id}
+                    </div>
+                    <div>
+                      <span className={`font-semibold ${isDark ? 'text-gray-300' : 'text-gray-800'}`}>Designation:</span>{" "}
+                      {selectedEmployee.designation}
+                    </div>
+                    <div>
+                      <span className={`font-semibold ${isDark ? 'text-gray-300' : 'text-gray-800'}`}>Department:</span>{" "}
+                      {selectedEmployee.department}
+                    </div>
+                    <div>
+                      <span className={`font-semibold ${isDark ? 'text-gray-300' : 'text-gray-800'}`}>Month:</span> {month} {year}
+                    </div>
                   </div>
                 </div>
+                
+                <button
+                  onClick={() => printReports([selectedEmployee])}
+                  className={`px-4 py-2 text-sm rounded-lg text-white font-semibold shadow transition ${isDark ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-indigo-500 hover:bg-indigo-600'}`}
+                >
+                  🖨️ Print Report
+                </button>
               </div>
 
               {(() => {

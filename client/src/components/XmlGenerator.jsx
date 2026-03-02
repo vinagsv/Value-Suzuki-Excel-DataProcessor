@@ -417,7 +417,7 @@ const XmlGenerator = ({ theme }) => {
 
         {/* Footer note */}
         <p style={{ textAlign: 'center', marginTop: 24, fontSize: 18, color:"#ef4444" }}>
-          ⚠️ This tool must be used with high caution. Always review generated data files before importing into Tally.All Ledgers and entries must be exact. make sure to take Tally data bakup before importing.
+          ⚠️ This tool must be used with high caution. Always review generated data files before importing into Tally.All Ledgers and entries must be exact. make sure to take Tally data backup before importing.
         </p>
       </div>
     </div>

@@ -22,7 +22,7 @@ const DpReceipt = ({ theme }) => {
     logoHeight: '120', 
     logoWidth: 'auto', 
     logoMarginBottom: '2', 
-    logoVerticalOffset: '0', 
+    logoVerticalOffset: '-30', // Moved upwards from 0 to align with company name
     headerMarginBottom: '4', 
     companyNameSize: 'xl', 
     addressTextSize: 'sm', 
@@ -217,7 +217,7 @@ const DpReceipt = ({ theme }) => {
         <div className={`w-full lg:w-2/3 rounded-xl p-1 overflow-auto flex justify-center ${isDark ? "bg-gray-700/50" : "bg-gray-200"}`}>
            <div className="transform scale-[0.6] md:scale-[0.75] lg:scale-90 origin-top p-4">
             
-            <div ref={componentRef} className="print-container bg-white shadow-2xl text-black font-sans leading-snug mx-auto" style={{ width: '210mm', minHeight: '297mm', padding: LAYOUT.pagePadding, boxSizing: 'border-box' }}>
+            <div ref={componentRef} className="print-container bg-white shadow-2xl text-black font-sans leading-snug mx-auto" style={{ width: '210mm', height: '296mm', maxHeight: '296mm', overflow: 'hidden', padding: LAYOUT.pagePadding, boxSizing: 'border-box' }}>
               <style type="text/css" media="print">
                 {tailwindStyles}
                 {`
@@ -227,13 +227,17 @@ const DpReceipt = ({ theme }) => {
                     padding: 0 !important;
                     width: 100%;
                     height: 100%;
+                    max-height: 100%;
+                    overflow: hidden !important;
                     background: white;
                     -webkit-print-color-adjust: exact;
                     print-color-adjust: exact;
                   }
                   .print-container {
-                    width: 100% !important;
-                    height: 100% !important;
+                    width: 210mm !important;
+                    height: 296mm !important;
+                    max-height: 296mm !important;
+                    overflow: hidden !important;
                     margin: 0 !important;
                     padding: ${LAYOUT.pagePadding} !important;
                     box-shadow: none !important;
@@ -241,6 +245,8 @@ const DpReceipt = ({ theme }) => {
                     position: absolute;
                     top: 0;
                     left: 0;
+                    page-break-after: avoid;
+                    page-break-inside: avoid;
                   }
                 `}
               </style>
