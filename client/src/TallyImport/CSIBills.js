@@ -65,6 +65,17 @@ const CONFIG = {
 // HELPERS
 // ==========================================
 
+// Helper: Escape XML special characters to prevent Tally import errors
+const escapeXML = (str) => {
+    if (!str) return '';
+    return str.toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+};
+
 // Helper: Check if a value is strictly a valid number
 const isInvalidNumber = (val) => {
     if (val === undefined || val === null) return true;
@@ -125,7 +136,7 @@ export async function processFileClientSide(file, fromDateStr = null, toDateStr 
     xml += `   <REQUESTDESC>\n`;
     xml += `    <REPORTNAME>Vouchers</REPORTNAME>\n`;
     xml += `    <STATICVARIABLES>\n`;
-    xml += `     <SVCURRENTCOMPANY>${CONFIG.COMPANY.NAME}</SVCURRENTCOMPANY>\n`;
+    xml += `     <SVCURRENTCOMPANY>${escapeXML(CONFIG.COMPANY.NAME)}</SVCURRENTCOMPANY>\n`;
     xml += `    </STATICVARIABLES>\n`;
     xml += `   </REQUESTDESC>\n`;
     xml += `   <REQUESTDATA>\n`;
@@ -205,7 +216,7 @@ export async function processFileClientSide(file, fromDateStr = null, toDateStr 
         if (lastValidSeq !== null && currentSeq > lastValidSeq + 1) {
             for (let missingSeq = lastValidSeq + 1; missingSeq < currentSeq; missingSeq++) {
                 const missingBillNumber = `${CONFIG.BILL_FORMAT.PREFIX}${String(missingSeq).padStart(8, '0')}`;
-                xml += buildCancelledXML(dateFormatted, missingBillNumber, "Auto Imported from Excel - Missing Number Cancelled");
+                xml += buildCancelledXML(dateFormatted, escapeXML(missingBillNumber), "Auto Imported from Excel - Missing Number Cancelled");
                 cancelledCount++;
             }
         }
@@ -215,17 +226,17 @@ export async function processFileClientSide(file, fromDateStr = null, toDateStr 
         const rawAmount = (colIdx.amount !== -1) ? row[colIdx.amount] : '';
         const rawNarration = (colIdx.narration !== -1) ? (row[colIdx.narration] || '').toString().trim() : '';
 
-        const finalNarration = rawNarration ? `Auto Imported from Excel ${rawNarration}` : `Auto Imported from Excel`;
+        const finalNarration = escapeXML(rawNarration ? `Auto Imported from Excel ${rawNarration}` : `Auto Imported from Excel`);
         
         const validLedger = getValidLedgerName(rawPaymentMode);
         const isAmountInvalid = isInvalidNumber(rawAmount);
         const targetTotal = parseFloat(rawAmount) || 0;
 
         if (!validLedger || isAmountInvalid || targetTotal <= 0) {
-            xml += buildCancelledXML(dateFormatted, rawBillNumber, finalNarration);
+            xml += buildCancelledXML(dateFormatted, escapeXML(rawBillNumber), finalNarration);
             cancelledCount++;
         } else {
-            xml += buildNormalXML(dateFormatted, rawBillNumber, validLedger, targetTotal, finalNarration);
+            xml += buildNormalXML(dateFormatted, escapeXML(rawBillNumber), escapeXML(validLedger), targetTotal, finalNarration);
             createdCount++;
         }
     }
@@ -234,7 +245,7 @@ export async function processFileClientSide(file, fromDateStr = null, toDateStr 
     xml += `     <COMPANY>\n`;
     xml += `      <REMOTECMPINFO.LIST MERGE="Yes">\n`;
     xml += `       <NAME>${CONFIG.COMPANY.GUID}</NAME>\n`;
-    xml += `       <REMOTECMPNAME>${CONFIG.COMPANY.NAME}</REMOTECMPNAME>\n`;
+    xml += `       <REMOTECMPNAME>${escapeXML(CONFIG.COMPANY.NAME)}</REMOTECMPNAME>\n`;
     xml += `       <REMOTECMPSTATE>${CONFIG.COMPANY.STATE}</REMOTECMPSTATE>\n`;
     xml += `      </REMOTECMPINFO.LIST>\n`;
     xml += `     </COMPANY>\n`;
@@ -243,7 +254,7 @@ export async function processFileClientSide(file, fromDateStr = null, toDateStr 
     xml += `     <COMPANY>\n`;
     xml += `      <REMOTECMPINFO.LIST MERGE="Yes">\n`;
     xml += `       <NAME>${CONFIG.COMPANY.GUID}</NAME>\n`;
-    xml += `       <REMOTECMPNAME>${CONFIG.COMPANY.NAME}</REMOTECMPNAME>\n`;
+    xml += `       <REMOTECMPNAME>${escapeXML(CONFIG.COMPANY.NAME)}</REMOTECMPNAME>\n`;
     xml += `       <REMOTECMPSTATE>${CONFIG.COMPANY.STATE}</REMOTECMPSTATE>\n`;
     xml += `      </REMOTECMPINFO.LIST>\n`;
     xml += `     </COMPANY>\n`;
@@ -263,47 +274,31 @@ export async function processFileClientSide(file, fromDateStr = null, toDateStr 
 function buildCancelledXML(dateFormatted, billNumber, narration) {
     const uniqueGuid = window.crypto.randomUUID();
     let xml = `    <TALLYMESSAGE xmlns:UDF="TallyUDF">\n`;
-    xml += `     <VOUCHER REMOTEID="${uniqueGuid}" VCHTYPE="${CONFIG.VOUCHER.TYPE}" ACTION="Create" OBJVIEW="Invoice Voucher View">\n`;
-    xml += `      <OLDAUDITENTRYIDS.LIST TYPE="Number">\n`;
-    xml += `       <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>\n`;
-    xml += `      </OLDAUDITENTRYIDS.LIST>\n`;
+    xml += `     <VOUCHER REMOTEID="${uniqueGuid}" VCHTYPE="${CONFIG.VOUCHER.TYPE}" ACTION="Cancel" OBJVIEW="Invoice Voucher View">\n`;
     xml += `      <DATE>${dateFormatted}</DATE>\n`;
     xml += `      <VCHSTATUSDATE>${dateFormatted}</VCHSTATUSDATE>\n`;
     xml += `      <GUID>${uniqueGuid}</GUID>\n`;
-    xml += `      <GSTREGISTRATIONTYPE>Unregistered/Consumer</GSTREGISTRATIONTYPE>\n`;
-    xml += `      <VATDEALERTYPE>Unregistered</VATDEALERTYPE>\n`;
-    xml += `      <STATENAME>${CONFIG.COMPANY.STATE}</STATENAME>\n`;
     xml += `      <ENTEREDBY>accounts</ENTEREDBY>\n`;
     xml += `      <NARRATION>${narration}</NARRATION>\n`;
     xml += `      <OBJECTUPDATEACTION>Create</OBJECTUPDATEACTION>\n`;
-    xml += `      <COUNTRYOFRESIDENCE>${CONFIG.COMPANY.COUNTRY}</COUNTRYOFRESIDENCE>\n`;
-    xml += `      <PLACEOFSUPPLY>${CONFIG.COMPANY.STATE}</PLACEOFSUPPLY>\n`;
     xml += `      <VOUCHERTYPENAME>${CONFIG.VOUCHER.TYPE}</VOUCHERTYPENAME>\n`;
-    xml += `      <CLASSNAME>${CONFIG.VOUCHER.CLASS}</CLASSNAME>\n`;
     xml += `      <GSTREGISTRATION TAXTYPE="GST" TAXREGISTRATION="${CONFIG.COMPANY.GSTIN}">${CONFIG.COMPANY.STATE} Registration</GSTREGISTRATION>\n`;
-    xml += `      <CMPGSTIN>${CONFIG.COMPANY.GSTIN}</CMPGSTIN>\n`;
     xml += `      <VOUCHERNUMBER>${billNumber}</VOUCHERNUMBER>\n`;
-    xml += `      <CMPGSTREGISTRATIONTYPE>Regular</CMPGSTREGISTRATIONTYPE>\n`;
-    xml += `      <CONSIGNEESTATENAME>${CONFIG.COMPANY.STATE}</CONSIGNEESTATENAME>\n`;
-    xml += `      <CMPGSTSTATE>${CONFIG.COMPANY.STATE}</CMPGSTSTATE>\n`;
-    xml += `      <CONSIGNEECOUNTRYNAME>${CONFIG.COMPANY.COUNTRY}</CONSIGNEECOUNTRYNAME>\n`;
     xml += `      <NUMBERINGSTYLE>Automatic (Manual Override)</NUMBERINGSTYLE>\n`;
     xml += `      <CSTFORMISSUETYPE>&#4; Not Applicable</CSTFORMISSUETYPE>\n`;
     xml += `      <CSTFORMRECVTYPE>&#4; Not Applicable</CSTFORMRECVTYPE>\n`;
-    xml += `      <FBTPAYMENTTYPE>Default</FBTPAYMENTTYPE>\n`;
     xml += `      <PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>\n`;
     xml += `      <VCHSTATUSTAXADJUSTMENT>Default</VCHSTATUSTAXADJUSTMENT>\n`;
     xml += `      <VCHSTATUSVOUCHERTYPE>${CONFIG.VOUCHER.TYPE}</VCHSTATUSVOUCHERTYPE>\n`;
     xml += `      <VCHSTATUSTAXUNIT>${CONFIG.COMPANY.STATE} Registration</VCHSTATUSTAXUNIT>\n`;
     xml += `      <VCHGSTCLASS>&#4; Not Applicable</VCHGSTCLASS>\n`;
-    xml += `      <VCHENTRYMODE>Accounting Invoice</VCHENTRYMODE>\n`;
     xml += `      <DIFFACTUALQTY>No</DIFFACTUALQTY>\n`;
     xml += `      <ISMSTFROMSYNC>No</ISMSTFROMSYNC>\n`;
     xml += `      <ISDELETED>No</ISDELETED>\n`;
     xml += `      <ISSECURITYONWHENENTERED>Yes</ISSECURITYONWHENENTERED>\n`;
     xml += `      <ASORIGINAL>No</ASORIGINAL>\n`;
     xml += `      <AUDITED>No</AUDITED>\n`;
-    xml += `      <ISCOMMONPARTY>Yes</ISCOMMONPARTY>\n`;
+    xml += `      <ISCOMMONPARTY>No</ISCOMMONPARTY>\n`;
     xml += `      <FORJOBCOSTING>No</FORJOBCOSTING>\n`;
     xml += `      <ISOPTIONAL>No</ISOPTIONAL>\n`;
     xml += `      <EFFECTIVEDATE>${dateFormatted}</EFFECTIVEDATE>\n`;
@@ -333,7 +328,7 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
     xml += `      <IGNOREGSTCONFLICTINMIG>No</IGNOREGSTCONFLICTINMIG>\n`;
     xml += `      <ISOPBALTRANSACTION>No</ISOPBALTRANSACTION>\n`;
     xml += `      <IGNOREGSTFORMATVALIDATION>No</IGNOREGSTFORMATVALIDATION>\n`;
-    xml += `      <ISELIGIBLEFORITC>Yes</ISELIGIBLEFORITC>\n`;
+    xml += `      <ISELIGIBLEFORITC>No</ISELIGIBLEFORITC>\n`;
     xml += `      <IGNOREGSTOPTIONALUNCERTAIN>No</IGNOREGSTOPTIONALUNCERTAIN>\n`;
     xml += `      <UPDATESUMMARYVALUES>No</UPDATESUMMARYVALUES>\n`;
     xml += `      <ISEWAYBILLAPPLICABLE>No</ISEWAYBILLAPPLICABLE>\n`;
@@ -371,10 +366,10 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
     xml += `      <OVRDNEWAYBILLAPPLICABILITY>No</OVRDNEWAYBILLAPPLICABILITY>\n`;
     xml += `      <ISVATPRINCIPALACCOUNT>No</ISVATPRINCIPALACCOUNT>\n`;
     xml += `      <VCHSTATUSISVCHNUMUSED>No</VCHSTATUSISVCHNUMUSED>\n`;
-    xml += `      <VCHGSTSTATUSISINCLUDED>Yes</VCHGSTSTATUSISINCLUDED>\n`;
+    xml += `      <VCHGSTSTATUSISINCLUDED>No</VCHGSTSTATUSISINCLUDED>\n`;
     xml += `      <VCHGSTSTATUSISUNCERTAIN>No</VCHGSTSTATUSISUNCERTAIN>\n`;
     xml += `      <VCHGSTSTATUSISEXCLUDED>No</VCHGSTSTATUSISEXCLUDED>\n`;
-    xml += `      <VCHGSTSTATUSISAPPLICABLE>Yes</VCHGSTSTATUSISAPPLICABLE>\n`;
+    xml += `      <VCHGSTSTATUSISAPPLICABLE>No</VCHGSTSTATUSISAPPLICABLE>\n`;
     xml += `      <VCHGSTSTATUSISGSTR2BRECONCILED>No</VCHGSTSTATUSISGSTR2BRECONCILED>\n`;
     xml += `      <VCHGSTSTATUSISGSTR2BONLYINPORTAL>No</VCHGSTSTATUSISGSTR2BONLYINPORTAL>\n`;
     xml += `      <VCHGSTSTATUSISGSTR2BONLYINBOOKS>No</VCHGSTSTATUSISGSTR2BONLYINBOOKS>\n`;
@@ -395,12 +390,12 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
     xml += `      <VCHSTATUSISFETCHEDONLY>No</VCHSTATUSISFETCHEDONLY>\n`;
     xml += `      <VCHGSTSTATUSISOPTIONALUNCERTAIN>No</VCHGSTSTATUSISOPTIONALUNCERTAIN>\n`;
     xml += `      <VCHSTATUSISREACCEPTFORHSNDONE>No</VCHSTATUSISREACCEPTFORHSNDONE>\n`;
-    xml += `      <VCHSTATUSISREACCEPHSNSIXONEDONE>Yes</VCHSTATUSISREACCEPHSNSIXONEDONE>\n`;
+    xml += `      <VCHSTATUSISREACCEPHSNSIXONEDONE>No</VCHSTATUSISREACCEPHSNSIXONEDONE>\n`;
     xml += `      <PAYMENTLINKHASMULTIREF>No</PAYMENTLINKHASMULTIREF>\n`;
     xml += `      <ISSHIPPINGWITHINSTATE>No</ISSHIPPINGWITHINSTATE>\n`;
     xml += `      <ISOVERSEASTOURISTTRANS>No</ISOVERSEASTOURISTTRANS>\n`;
     xml += `      <ISDESIGNATEDZONEPARTY>No</ISDESIGNATEDZONEPARTY>\n`;
-    xml += `      <HASCASHFLOW>Yes</HASCASHFLOW>\n`;
+    xml += `      <HASCASHFLOW>No</HASCASHFLOW>\n`;
     xml += `      <ISPOSTDATED>No</ISPOSTDATED>\n`;
     xml += `      <USETRACKINGNUMBER>No</USETRACKINGNUMBER>\n`;
     xml += `      <ISINVOICE>Yes</ISINVOICE>\n`;
@@ -417,7 +412,7 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
     xml += `      <VATISPURCEXEMPTED>No</VATISPURCEXEMPTED>\n`;
     xml += `      <ISVATRESTAXINVOICE>No</ISVATRESTAXINVOICE>\n`;
     xml += `      <VATISASSESABLECALCVCH>No</VATISASSESABLECALCVCH>\n`;
-    xml += `      <ISVATDUTYPAID>Yes</ISVATDUTYPAID>\n`;
+    xml += `      <ISVATDUTYPAID>No</ISVATDUTYPAID>\n`;
     xml += `      <ISDELIVERYSAMEASCONSIGNEE>No</ISDELIVERYSAMEASCONSIGNEE>\n`;
     xml += `      <ISDISPATCHSAMEASCONSIGNOR>No</ISDISPATCHSAMEASCONSIGNOR>\n`;
     xml += `      <ISDELETEDVCHRETAINED>No</ISDELETEDVCHRETAINED>\n`;
@@ -444,6 +439,17 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
     xml += `      <ATTENDANCEENTRIES.LIST>      </ATTENDANCEENTRIES.LIST>\n`;
     xml += `      <ORIGINVOICEDETAILS.LIST>      </ORIGINVOICEDETAILS.LIST>\n`;
     xml += `      <INVOICEEXPORTLIST.LIST>      </INVOICEEXPORTLIST.LIST>\n`;
+    xml += `      <LEDGERENTRIES.LIST>      </LEDGERENTRIES.LIST>\n`;
+    xml += `      <GST.LIST>      </GST.LIST>\n`;
+    xml += `      <STKJRNLADDLCOSTDETAILS.LIST>      </STKJRNLADDLCOSTDETAILS.LIST>\n`;
+    xml += `      <PAYROLLMODEOFPAYMENT.LIST>      </PAYROLLMODEOFPAYMENT.LIST>\n`;
+    xml += `      <ATTDRECORDS.LIST>      </ATTDRECORDS.LIST>\n`;
+    xml += `      <GSTEWAYCONSIGNORADDRESS.LIST>      </GSTEWAYCONSIGNORADDRESS.LIST>\n`;
+    xml += `      <GSTEWAYCONSIGNEEADDRESS.LIST>      </GSTEWAYCONSIGNEEADDRESS.LIST>\n`;
+    xml += `      <TEMPGSTRATEDETAILS.LIST>      </TEMPGSTRATEDETAILS.LIST>\n`;
+    xml += `      <TEMPGSTADVADJUSTED.LIST>      </TEMPGSTADVADJUSTED.LIST>\n`;
+    xml += `      <GSTBUYERADDRESS.LIST>      </GSTBUYERADDRESS.LIST>\n`;
+    xml += `      <GSTCONSIGNEEADDRESS.LIST>      </GSTCONSIGNEEADDRESS.LIST>\n`;
     xml += `     </VOUCHER>\n`;
     xml += `    </TALLYMESSAGE>\n`;
     return xml;

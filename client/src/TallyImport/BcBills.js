@@ -8,7 +8,7 @@ const CONFIG = {
 
     // Company Details
     COMPANY: {
-        NAME: "Value Motor Agency Pvt Ltd (BACKUP)",
+        NAME: "Value Motor Agency Pvt Ltd 2021-22 - (from 1-Apr-22)",
         REMOTE_NAME: "Value Motor Agency Pvt Ltd 2021-22 - (from 1-Apr-22)",
         GUID: "1d1e0390-a42e-4704-899b-839c3939bb43",
         GSTIN: "29AACCV2521J1ZA",
@@ -52,6 +52,12 @@ const CONFIG = {
         SGST: "SGST OUTPUT",
         ROUND_OFF: "Round Off",
         LABOUR: "Labour Charges Received"
+    },
+
+    // Cost Centre Configuration
+    COST_CENTRE: {
+        CATEGORY: "Primary Cost Category",
+        NAME: "Service"
     },
 
     // Tax and HSN Information
@@ -230,7 +236,7 @@ export async function processBCFileClientSide(file, fromDateStr = null, toDateSt
         const areBothAmountsZero = salesAmount === 0 && labourAmount === 0;
 
         if (!validLedger || isSalesInvalid || isTotalInvalid || targetTotal <= 0 || areBothAmountsZero) {
-            xml += buildCancelledXML(dateFormatted, rawBillNumber, finalNarration);
+            xml += buildCancelledXML(dateFormatted, rawBillNumber, "cancelled, auto imported from Excel");
             cancelledCount++;
         } else {
             xml += buildNormalXML(dateFormatted, rawBillNumber, validLedger, salesAmount, labourAmount, targetTotal, finalNarration);
@@ -238,6 +244,7 @@ export async function processBCFileClientSide(file, fromDateStr = null, toDateSt
         }
     }
 
+    // Append remote company info closing blocks exactly as Tally outputs them
     xml += `    <TALLYMESSAGE xmlns:UDF="TallyUDF">\n`;
     xml += `     <COMPANY>\n`;
     xml += `      <REMOTECMPINFO.LIST MERGE="Yes">\n`;
@@ -272,19 +279,22 @@ export async function processBCFileClientSide(file, fromDateStr = null, toDateSt
 function buildCancelledXML(dateFormatted, billNumber, narration) {
     const uniqueGuid = window.crypto.randomUUID();
     let xml = `    <TALLYMESSAGE xmlns:UDF="TallyUDF">\n`;
-    xml += `     <VOUCHER REMOTEID="${uniqueGuid}" VCHTYPE="${CONFIG.VOUCHER.TYPE}" ACTION="Create" OBJVIEW="Invoice Voucher View">\n`;
+    xml += `     <VOUCHER REMOTEID="${uniqueGuid}" VCHTYPE="${CONFIG.VOUCHER.TYPE}" ACTION="Cancel" OBJVIEW="Invoice Voucher View">\n`;
     xml += `      <DATE>${dateFormatted}</DATE>\n`;
     xml += `      <VCHSTATUSDATE>${dateFormatted}</VCHSTATUSDATE>\n`;
     xml += `      <GUID>${uniqueGuid}</GUID>\n`;
     xml += `      <NARRATION>${narration}</NARRATION>\n`;
     xml += `      <ENTEREDBY>accounts</ENTEREDBY>\n`;
-    xml += `      <OBJECTUPDATEACTION>Create</OBJECTUPDATEACTION>\n`;
+    // Changed to Alter for cancelled entries
+    xml += `      <OBJECTUPDATEACTION>Alter</OBJECTUPDATEACTION>\n`;
     xml += `      <VOUCHERTYPENAME>${CONFIG.VOUCHER.TYPE}</VOUCHERTYPENAME>\n`;
     xml += `      <GSTREGISTRATION TAXTYPE="GST" TAXREGISTRATION="${CONFIG.COMPANY.GSTIN}">${CONFIG.COMPANY.STATE} Registration</GSTREGISTRATION>\n`;
     xml += `      <VOUCHERNUMBER>${billNumber}</VOUCHERNUMBER>\n`;
     xml += `      <NUMBERINGSTYLE>Automatic (Manual Override)</NUMBERINGSTYLE>\n`;
     xml += `      <CSTFORMISSUETYPE>&#4; Not Applicable</CSTFORMISSUETYPE>\n`;
     xml += `      <CSTFORMRECVTYPE>&#4; Not Applicable</CSTFORMRECVTYPE>\n`;
+    // Persisted view required
+    xml += `      <PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>\n`;
     xml += `      <VCHSTATUSTAXADJUSTMENT>Default</VCHSTATUSTAXADJUSTMENT>\n`;
     xml += `      <VCHSTATUSVOUCHERTYPE>${CONFIG.VOUCHER.TYPE}</VCHSTATUSVOUCHERTYPE>\n`;
     xml += `      <VCHSTATUSTAXUNIT>${CONFIG.COMPANY.STATE} Registration</VCHSTATUSTAXUNIT>\n`;
@@ -292,7 +302,7 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
     xml += `      <DIFFACTUALQTY>No</DIFFACTUALQTY>\n`;
     xml += `      <ISMSTFROMSYNC>No</ISMSTFROMSYNC>\n`;
     xml += `      <ISDELETED>No</ISDELETED>\n`;
-    xml += `      <ISSECURITYONWHENENTERED>No</ISSECURITYONWHENENTERED>\n`;
+    xml += `      <ISSECURITYONWHENENTERED>Yes</ISSECURITYONWHENENTERED>\n`;
     xml += `      <ASORIGINAL>No</ASORIGINAL>\n`;
     xml += `      <AUDITED>No</AUDITED>\n`;
     xml += `      <ISCOMMONPARTY>No</ISCOMMONPARTY>\n`;
@@ -417,6 +427,7 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
     xml += `      <CHANGEVCHMODE>No</CHANGEVCHMODE>\n`;
     xml += `      <RESETIRNQRCODE>No</RESETIRNQRCODE>\n`;
     xml += `      <VOUCHERNUMBERSERIES>Default</VOUCHERNUMBERSERIES>\n`;
+    // Empty list closures must be present even for cancelled bills
     xml += `      <EWAYBILLDETAILS.LIST>      </EWAYBILLDETAILS.LIST>\n`;
     xml += `      <EXCLUDEDTAXATIONS.LIST>      </EXCLUDEDTAXATIONS.LIST>\n`;
     xml += `      <OLDAUDITENTRIES.LIST>      </OLDAUDITENTRIES.LIST>\n`;
@@ -719,6 +730,8 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, salesAmount, lab
         xml += `       <LEDGERNAME>${CONFIG.LEDGERS.SALES}</LEDGERNAME>\n`;
         xml += `       <METHODTYPE>On Total Sales</METHODTYPE>\n`;
         xml += `       <GSTCLASS>&#4; Not Applicable</GSTCLASS>\n`;
+        // Added the missing GSTOVRDNINELIGIBLEITC tag here
+        xml += `       <GSTOVRDNINELIGIBLEITC>&#4; Applicable</GSTOVRDNINELIGIBLEITC>\n`;
         xml += `       <GSTOVRDNISREVCHARGEAPPL>&#4; Not Applicable</GSTOVRDNISREVCHARGEAPPL>\n`;
         xml += `       <GSTOVRDNTAXABILITY>Taxable</GSTOVRDNTAXABILITY>\n`;
         xml += `       <GSTSOURCETYPE>Ledger</GSTSOURCETYPE>\n`;
@@ -746,6 +759,14 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, salesAmount, lab
         xml += `       <AMOUNT>${salesAmount.toFixed(2)}</AMOUNT>\n`;
         xml += `       <VATEXPAMOUNT>${salesAmount.toFixed(2)}</VATEXPAMOUNT>\n`;
         xml += `       <SERVICETAXDETAILS.LIST>       </SERVICETAXDETAILS.LIST>\n`;
+        xml += `       <CATEGORYALLOCATIONS.LIST>\n`;
+        xml += `        <CATEGORY>${CONFIG.COST_CENTRE.CATEGORY}</CATEGORY>\n`;
+        xml += `        <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>\n`;
+        xml += `        <COSTCENTREALLOCATIONS.LIST>\n`;
+        xml += `         <NAME>${CONFIG.COST_CENTRE.NAME}</NAME>\n`;
+        xml += `         <AMOUNT>${salesAmount.toFixed(2)}</AMOUNT>\n`;
+        xml += `        </COSTCENTREALLOCATIONS.LIST>\n`;
+        xml += `       </CATEGORYALLOCATIONS.LIST>\n`;
         xml += `       <BANKALLOCATIONS.LIST>       </BANKALLOCATIONS.LIST>\n`;
         xml += `       <BILLALLOCATIONS.LIST>       </BILLALLOCATIONS.LIST>\n`;
         xml += `       <INTERESTCOLLECTION.LIST>       </INTERESTCOLLECTION.LIST>\n`;
@@ -805,6 +826,8 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, salesAmount, lab
         xml += `       <LEDGERNAME>${CONFIG.LEDGERS.LABOUR}</LEDGERNAME>\n`;
         xml += `       <METHODTYPE>On Total Sales</METHODTYPE>\n`;
         xml += `       <GSTCLASS>&#4; Not Applicable</GSTCLASS>\n`;
+        // Added the missing GSTOVRDNINELIGIBLEITC tag here
+        xml += `       <GSTOVRDNINELIGIBLEITC>&#4; Applicable</GSTOVRDNINELIGIBLEITC>\n`;
         xml += `       <GSTOVRDNISREVCHARGEAPPL>&#4; Not Applicable</GSTOVRDNISREVCHARGEAPPL>\n`;
         xml += `       <GSTOVRDNTAXABILITY>Taxable</GSTOVRDNTAXABILITY>\n`;
         xml += `       <GSTSOURCETYPE>Ledger</GSTSOURCETYPE>\n`;
@@ -835,6 +858,14 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, salesAmount, lab
         xml += `       <AMOUNT>${labourAmount.toFixed(2)}</AMOUNT>\n`;
         xml += `       <VATEXPAMOUNT>${labourAmount.toFixed(2)}</VATEXPAMOUNT>\n`;
         xml += `       <SERVICETAXDETAILS.LIST>       </SERVICETAXDETAILS.LIST>\n`;
+        xml += `       <CATEGORYALLOCATIONS.LIST>\n`;
+        xml += `        <CATEGORY>${CONFIG.COST_CENTRE.CATEGORY}</CATEGORY>\n`;
+        xml += `        <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>\n`;
+        xml += `        <COSTCENTREALLOCATIONS.LIST>\n`;
+        xml += `         <NAME>${CONFIG.COST_CENTRE.NAME}</NAME>\n`;
+        xml += `         <AMOUNT>${labourAmount.toFixed(2)}</AMOUNT>\n`;
+        xml += `        </COSTCENTREALLOCATIONS.LIST>\n`;
+        xml += `       </CATEGORYALLOCATIONS.LIST>\n`;
         xml += `       <BANKALLOCATIONS.LIST>       </BANKALLOCATIONS.LIST>\n`;
         xml += `       <BILLALLOCATIONS.LIST>       </BILLALLOCATIONS.LIST>\n`;
         xml += `       <INTERESTCOLLECTION.LIST>       </INTERESTCOLLECTION.LIST>\n`;
