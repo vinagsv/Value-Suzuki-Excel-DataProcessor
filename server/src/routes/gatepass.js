@@ -39,7 +39,8 @@ router.post('/', async (req, res) => {
       [date, customer_name, model, color, regn_no, chassis_no, sales_bill_no, spares_bill_no, service_bill_no, narration]
     );
 
-    await client.query("DELETE FROM gate_passes WHERE date < NOW() - INTERVAL '45 days'");
+    // Auto cleanup data older than 2 years
+    await client.query("DELETE FROM gate_passes WHERE date < NOW() - INTERVAL '2 years'");
 
     await client.query('COMMIT');
     res.json({ success: true, passNo: result.rows[0].pass_no });

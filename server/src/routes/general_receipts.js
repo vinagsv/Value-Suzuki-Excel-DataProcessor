@@ -166,6 +166,9 @@ router.post('/', async (req, res) => {
       console.warn("Skipping sequence update - table missing or failed.", seqErr.message);
     }
 
+    // Auto cleanup data older than 7 years
+    await client.query("DELETE FROM general_receipts WHERE date < NOW() - INTERVAL '7 years'");
+
     await client.query('COMMIT');
     res.json({ success: true, receiptNo: receipt_no });
   } catch (err) {

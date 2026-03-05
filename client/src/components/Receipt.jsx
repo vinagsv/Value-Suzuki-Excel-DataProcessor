@@ -311,20 +311,37 @@ const Receipt = ({ theme }) => {
       });
     }
 
-    const dataToExport = data.map(item => ({
-        "Receipt No": item.receipt_no,
-        "Status": item.status || 'ACTIVE',
+    // Sort data in ascending order (Date ASC, Receipt No ASC)
+    const sortedData = [...data].sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      if (dateA !== dateB) {
+        return dateA - dateB;
+      }
+      return parseInt(a.receipt_no) - parseInt(b.receipt_no);
+    });
+
+    const dataToExport = sortedData.map(item => {
+      const fileNo = item.file_no || '';
+      const customer = item.customer_name || '';
+      const fileCustomerCombined = fileNo && customer ? `${fileNo}-${customer}` : `${fileNo}${customer}`;
+
+      return {
         "Date": formatDate(item.date),
-        "Customer": item.customer_name,
-        "Mobile": item.mobile,
-        "GST": item.gst_no,
-        "File No": item.file_no,
+        "Receipt No": item.receipt_no,
+        "File Number-Customer Name": fileCustomerCombined,
         "Amount": item.amount,
-        "Type": item.payment_type,
         "Mode": item.payment_mode,
+        "Type": item.payment_type,
+        "File No": item.file_no,
+        "Customer Name": item.customer_name,
+        "Mobile": item.mobile,
+        "Status": item.status || 'ACTIVE',
         "Cheque No": item.cheque_no,
-        "Dated": item.payment_date ? formatDate(item.payment_date) : ''
-    }));
+        "Dated": item.payment_date ? formatDate(item.payment_date) : '',
+        "GST": item.gst_no
+      };
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();

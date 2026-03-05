@@ -27,9 +27,9 @@ const FontStyle = () => (
     .v-badge { font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px; display:flex; align-items:center; gap: 3px; }
     .v-badge.local { background: var(--accent-dim); color: var(--accent); }
     .v-badge.rms { background: var(--green-dim); color: var(--green); }
-    .v-connect-btn { display: flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 10px; border: 1px solid; font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; cursor: pointer; transition: all 0.2s; }
+    .v-connect-btn { display: flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 10px; border: 1px solid; font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; transition: all 0.2s; }
     .v-connect-btn.connected { background: var(--green-dim); border-color: rgba(52,211,153,0.3); color: var(--green); }
-    .v-connect-btn.connecting { background: var(--accent-dim); border-color: rgba(108,126,248,0.3); color: var(--accent); cursor: wait; }
+    .v-connect-btn.connecting { background: var(--accent-dim); border-color: rgba(108,126,248,0.3); color: var(--accent); }
     .v-connect-btn.disconnected { background: var(--red-dim); border-color: rgba(248,113,113,0.3); color: var(--red); }
     .status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 6px currentColor; } .status-dot.pulse { animation: pulse-ring 1.2s ease-out infinite; } @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 currentColor; } 70% { box-shadow: 0 0 0 5px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
     .v-body { flex: 1; display: flex; overflow: hidden; }
@@ -68,14 +68,6 @@ const Verify = ({ theme }) => {
       else alert(msg);
   };
 
-  useEffect(() => {
-    const savedToken = sessionStorage.getItem("rmsToken");
-    if (savedToken) { 
-        setReqToken(savedToken); 
-        setConnectionStatus("connected"); 
-    }
-  }, []);
-
   // --- CONNECT LOGIC ---
   const handleConnect = async () => {
     setConnectionStatus("connecting");
@@ -113,6 +105,18 @@ const Verify = ({ theme }) => {
         setConnectionStatus("disconnected"); 
     }
   };
+
+  // Auto-connect on mount if no token exists, or load existing token
+  useEffect(() => {
+    const savedToken = sessionStorage.getItem("rmsToken");
+    if (savedToken) { 
+        setReqToken(savedToken); 
+        setConnectionStatus("connected"); 
+    } else {
+        handleConnect();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // --- SEARCH LOGIC ---
   const executeSearch = async (targetFileNo) => {
@@ -283,10 +287,17 @@ const Verify = ({ theme }) => {
                   </div>
               )}
             </form>
-            <button onClick={handleConnect} disabled={connectionStatus === 'connected'} className={`v-connect-btn ${connectionStatus}`}>
+            
+            {/* Status Indicator / Manual Retry Button */}
+            <div 
+              onClick={() => connectionStatus === 'disconnected' && handleConnect()} 
+              className={`v-connect-btn ${connectionStatus}`}
+              style={{ cursor: connectionStatus === 'disconnected' ? 'pointer' : 'default' }}
+            >
               <div className={`status-dot ${connectionStatus === 'connecting' ? 'pulse' : ''}`} />
-              {connectionStatus === 'connected' ? 'RMS Online' : connectionStatus === 'connecting' ? 'Connecting…' : 'Connect RMS'}
-            </button>
+              {connectionStatus === 'connected' ? 'RMS Online' : connectionStatus === 'connecting' ? 'Connecting…' : 'RMS Offline'}
+            </div>
+
           </div>
         </header>
 

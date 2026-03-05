@@ -49,7 +49,11 @@ function App() {
     return localStorage.getItem("activePage") || "gatepass";
   });
 
-  const [isCalcOpen, setIsCalcOpen] = useState(false);
+  // Read the initial calculator state from localStorage
+  const [isCalcOpen, setIsCalcOpen] = useState(() => {
+    return localStorage.getItem("isCalcOpen") === "true";
+  });
+
   const [loginMessage, setLoginMessage] = useState("");
   const isDark = theme === "dark";
 
@@ -73,6 +77,11 @@ function App() {
   useEffect(() => {
     localStorage.setItem("activePage", activePage);
   }, [activePage]);
+
+  // Persist calculator state whenever it changes
+  useEffect(() => {
+    localStorage.setItem("isCalcOpen", isCalcOpen);
+  }, [isCalcOpen]);
 
   useEffect(() => {
     const handleSessionExpiry = () => {

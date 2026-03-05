@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Loader2, FileText, Printer, AlertTriangle } from 'lucide-react';
+import { Loader2, FileText, Printer, AlertTriangle, Upload } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -7,8 +7,13 @@ const PriceList = ({ theme, isActive }) => {
     const isDark = theme === 'dark';
     const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [uploading, setUploading] = useState(false);
     const [error, setError] = useState(null);
+    
     const iframeRef = useRef(null);
+    const fileInputRef = useRef(null);
+    
+    const isAdmin = localStorage.getItem('userRole') === 'admin';
 
     useEffect(() => {
         if (isActive && !pdfBlobUrl && !error) {
@@ -49,6 +54,35 @@ const PriceList = ({ theme, isActive }) => {
         finally { setLoading(false); }
     };
 
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+        setUploading(true);
+
+        try {
+            const res = await fetch(`${API_URL}/admin/pricelist/upload`, {
+                method: 'POST',
+                body: formData,
+                credentials: 'include'
+            });
+            const data = await res.json();
+            if (res.ok) {
+                if (window.toast) window.toast(data.message, 'success');
+                fetchPriceList(); // Refresh the iframe to show the new PDF
+            } else {
+                if (window.toast) window.toast(data.error, 'error');
+            }
+        } catch (err) {
+            if (window.toast) window.toast("Upload failed", 'error');
+        } finally {
+            setUploading(false);
+            if (fileInputRef.current) fileInputRef.current.value = ''; // Reset input
+        }
+    };
+
     const handlePrint = () => {
         if (iframeRef.current && iframeRef.current.contentWindow) {
             iframeRef.current.contentWindow.print();
@@ -66,21 +100,44 @@ const PriceList = ({ theme, isActive }) => {
                         </div>
                         <div>
                             <h1 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>Price List</h1>
-                            
                         </div>
                     </div>
 
-                    {pdfBlobUrl && (
-                        <button 
-                            onClick={handlePrint} 
-                            className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-bold transition-transform transform active:scale-95 ${
-                                isDark ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'
-                            } shadow-md`}
-                        >
-                            <Printer size={16} />
-                            Print Price List
-                        </button>
-                    )}
+                    <div className="flex items-center gap-3">
+                        {isAdmin && (
+                            <>
+                                <input 
+                                    type="file" 
+                                    accept=".pdf" 
+                                    ref={fileInputRef} 
+                                    onChange={handleFileUpload} 
+                                    className="hidden" 
+                                />
+                                <button 
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={uploading}
+                                    className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-bold transition-transform transform active:scale-95 ${
+                                        isDark ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-purple-600 hover:bg-purple-700 text-white'
+                                    } shadow-md disabled:opacity-50`}
+                                >
+                                    {uploading ? <Loader2 className="animate-spin" size={16} /> : <Upload size={16} />}
+                                    {uploading ? 'Uploading...' : 'Upload Price List'}
+                                </button>
+                            </>
+                        )}
+                        
+                        {pdfBlobUrl && (
+                            <button 
+                                onClick={handlePrint} 
+                                className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-bold transition-transform transform active:scale-95 ${
+                                    isDark ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                } shadow-md`}
+                            >
+                                <Printer size={16} />
+                                Print Price List
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 <div className={`flex-1 flex flex-col overflow-hidden rounded-xl border shadow-inner ${isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-300 bg-white'}`}>
@@ -98,7 +155,7 @@ const PriceList = ({ theme, isActive }) => {
                     ) : !pdfBlobUrl ? (
                         <div className={`flex-1 flex justify-center items-center text-center p-8 flex-col gap-3 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                             <FileText size={48} className="opacity-50" />
-                            <span>No price list pdf available.<br/>Please "Save as PDF" in Excel and upload it from the Admin Panel.</span>
+                            <span>No price list pdf available.<br/>{isAdmin ? 'Please click "Upload Price List" above to add one.' : 'Please ask an administrator to upload the price list.'}</span>
                         </div>
                     ) : (
                         <div className="flex-1 w-full h-full overflow-hidden bg-gray-500/10 flex items-center justify-center">

@@ -38,7 +38,10 @@ router.post('/', async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, $6) RETURNING receipt_no`,
       [date, customer_name, amount, payment_mode, hp_financier, model]
     );
-    await client.query("DELETE FROM dp_receipts WHERE date < NOW() - INTERVAL '45 days'");
+    
+    // Auto cleanup data older than 2 years
+    await client.query("DELETE FROM dp_receipts WHERE date < NOW() - INTERVAL '2 years'");
+    
     await client.query('COMMIT');
     res.json({ success: true, receiptNo: result.rows[0].receipt_no });
   } catch (err) {

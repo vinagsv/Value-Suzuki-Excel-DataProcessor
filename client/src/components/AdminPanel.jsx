@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Settings, Database, Trash2, Upload, Save, UserPlus, X, Check, RefreshCw, Edit3, Hash } from 'lucide-react';
+import { Users, Settings, Database, Trash2, Save, UserPlus, Edit3, Hash } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -21,9 +21,6 @@ const AdminPanel = ({ theme }) => {
 
     // Bulk Delete State
     const [delRange, setDelRange] = useState({ from: '', to: '' });
-
-    // PDF Upload State
-    const [pdfFile, setPdfFile] = useState(null);
 
     // Sequence Controls State
     const [seqValues, setSeqValues] = useState({
@@ -142,27 +139,6 @@ const AdminPanel = ({ theme }) => {
         const data = await res.json();
         if(res.ok) showToast(data.message);
         else showToast(data.error, 'error');
-    };
-
-    const handlePdfUpload = async () => {
-        if(!pdfFile) return;
-        const formData = new FormData();
-        formData.append('file', pdfFile);
-        
-        const res = await fetch(`${API_URL}/admin/pricelist/upload`, {
-            method: 'POST',
-            body: formData,
-            credentials: 'include'
-        });
-        const data = await res.json();
-        if(res.ok) {
-            showToast(data.message);
-            setPdfFile(null); // Clear file input after successful upload
-            // Optionally clear the input field visually
-            document.getElementById('pdf-upload-input').value = "";
-        } else {
-            showToast(data.error, 'error');
-        }
     };
 
     const tabClass = (id) => `px-6 py-3 font-bold rounded-t-lg transition-colors ${activeTab === id 
@@ -332,26 +308,6 @@ const AdminPanel = ({ theme }) => {
                                 <input type="date" value={delRange.to} onChange={e => setDelRange({...delRange, to: e.target.value})} className={inputClass}/>
                             </div>
                             <button onClick={handleBulkDelete} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-bold w-full">Delete Permanently</button>
-                        </div>
-
-                        {/* Price List PDF Upload */}
-                        <div className={`p-6 rounded-xl border-l-4 border-blue-500 ${isDark ? 'bg-blue-900/10' : 'bg-blue-50'}`}>
-                            <h3 className="font-bold text-blue-600 flex items-center gap-2 mb-4"><Upload/> Price List PDF Upload</h3>
-                            <p className="text-sm mb-4 text-gray-500">Save your Excel file as a PDF and upload it here for a perfect visual snapshot.</p>
-                            <input 
-                                id="pdf-upload-input"
-                                type="file" 
-                                accept=".pdf" 
-                                onChange={e => setPdfFile(e.target.files[0])} 
-                                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 mb-4"
-                            />
-                            <button 
-                                onClick={handlePdfUpload} 
-                                disabled={!pdfFile} 
-                                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded font-bold w-full transition-colors"
-                            >
-                                Upload PDF Snapshot
-                            </button>
                         </div>
                     </div>
                 )}
