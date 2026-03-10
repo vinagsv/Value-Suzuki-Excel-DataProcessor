@@ -10,9 +10,16 @@ const Calculator = ({ theme }) => {
 
     const solveCalc = () => {
         try {
-            // Strip out everything except numbers, math operators, braces, and percentage
-            const sanitized = calcInput.replace(/[^0-9+\-*/().%]/g, '');
+            // 1. Remove '=' signs entirely, then strip everything except numbers, math operators, braces, and percentage
+            let sanitized = calcInput.replace(/=/g, '').replace(/[^0-9+\-*/().%]/g, '');
+            
+            // 2. Remove leading invalid operators like *, /, or . that would break JS evaluation
+            sanitized = sanitized.replace(/^[*/.]+/, '');
+
             if(!sanitized) return;
+
+            // Safeguard: Do not evaluate if the string is just operators/brackets (e.g. "++" or "()")
+            if (/^[+\-*/().]+$/.test(sanitized)) return;
             
             // Replace % with /100 so the JS evaluator can process it logically
             const evalStr = sanitized.replace(/%/g, '/100');
@@ -20,10 +27,19 @@ const Calculator = ({ theme }) => {
             // eslint-disable-next-line no-new-func
             const res = new Function('return ' + evalStr)();
             
-            if(res !== undefined && !isNaN(res)) {
+            if (res !== undefined && !isNaN(res)) {
+                // Safeguard: Check for Infinity (e.g., division by zero)
+                if (!isFinite(res)) {
+                    setCalcResult("Undefined");
+                    return;
+                }
+
+                // Round to max 8 decimal places, removing unnecessary trailing zeros
+                const roundedRes = parseFloat(Number(res).toFixed(8));
+                
                 // Update Result and History
-                setCalcResult(res.toString());
-                setCalcHistory(prev => [{ input: sanitized, result: res.toString() }, ...prev]);
+                setCalcResult(roundedRes.toString());
+                setCalcHistory(prev => [{ input: sanitized, result: roundedRes.toString() }, ...prev]);
                 setCalcInput("");
                 setSelectedIndex(-1); // Reset selection
             }
@@ -39,6 +55,21 @@ const Calculator = ({ theme }) => {
         setSelectedIndex(-1);
     };
 
+    const commitSelection = () => {
+        if (selectedIndex > -1 && calcHistory.length > 0) {
+            const histIdx = Math.floor(selectedIndex / 2);
+            if (histIdx >= calcHistory.length) return false;
+            
+            const isResult = selectedIndex % 2 === 1;
+            const valueToInsert = isResult ? calcHistory[histIdx].result : calcHistory[histIdx].input;
+            
+            setCalcInput(valueToInsert);
+            setSelectedIndex(-1); // Reset selection after picking
+            return true;
+        }
+        return false;
+    };
+
     const handleKeyDown = (e) => {
         const totalItems = calcHistory.length * 2; // Each history entry has an input and a result
 
@@ -50,19 +81,42 @@ const Calculator = ({ theme }) => {
             setSelectedIndex(prev => (prev > -1 ? prev - 1 : -1));
         } else if (e.key === 'Enter') {
             e.preventDefault();
-            if (selectedIndex > -1) {
-                // Determine if selected index points to an expression (even) or a result (odd)
-                const histIdx = Math.floor(selectedIndex / 2);
-                const isResult = selectedIndex % 2 === 1;
-                const valueToInsert = isResult ? calcHistory[histIdx].result : calcHistory[histIdx].input;
-                
-                setCalcInput(valueToInsert);
-                setSelectedIndex(-1); // Reset selection after picking
-            } else {
+            // If an item is selected, commit it. Otherwise, solve the equation.
+            if (!commitSelection()) {
                 solveCalc();
             }
         } else if (e.key === 'Escape') {
             setSelectedIndex(-1);
+        }
+    };
+
+    const handleWheel = (e) => {
+        const totalItems = calcHistory.length * 2;
+        if (totalItems === 0) return;
+
+        // Scroll down acts like ArrowDown (moves selection down the list)
+        if (e.deltaY > 0) {
+            setSelectedIndex(prev => (prev < totalItems - 1 ? prev + 1 : prev));
+        } 
+        // Scroll up acts like ArrowUp (moves selection up the list)
+        else if (e.deltaY < 0) {
+            setSelectedIndex(prev => (prev > -1 ? prev - 1 : -1));
+        }
+    };
+
+    // Handle Left Click on the input field when an item is highlighted
+    const handleInputClick = (e) => {
+        if (selectedIndex > -1) {
+            e.preventDefault();
+            commitSelection();
+        }
+    };
+
+    // Handle Right Click on the input field when an item is highlighted
+    const handleInputContextMenu = (e) => {
+        if (selectedIndex > -1) {
+            e.preventDefault(); // Prevent standard browser right-click menu
+            commitSelection();
         }
     };
 
@@ -87,10 +141,14 @@ const Calculator = ({ theme }) => {
                         setSelectedIndex(-1);
                     }}
                     onKeyDown={handleKeyDown}
+                    onWheel={handleWheel}
+                    onClick={handleInputClick}
+                    onContextMenu={handleInputContextMenu}
+                    maxLength={200}
                     placeholder="E.g. (1500 + 350) * 10%"
                     className={`flex-none w-full h-14 px-4 rounded-xl font-mono text-lg border-2 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all ${
                         isDark ? 'bg-gray-800 border-gray-700 text-white focus:border-blue-500' : 'bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500'
-                    }`}
+                    } ${selectedIndex > -1 ? 'cursor-pointer' : 'cursor-text'}`}
                 />
                 
                 {/* Result Field (Same size as input) */}

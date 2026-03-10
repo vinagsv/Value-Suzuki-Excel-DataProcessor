@@ -336,6 +336,8 @@ const Receipt = ({ theme }) => {
         "File No": item.file_no,
         "Customer Name": item.customer_name,
         "Mobile": item.mobile,
+        "Model": item.model,
+        "HP To": item.hp_financier,
         "Status": item.status || 'ACTIVE',
         "Cheque No": item.cheque_no,
         "Dated": item.payment_date ? formatDate(item.payment_date) : '',
