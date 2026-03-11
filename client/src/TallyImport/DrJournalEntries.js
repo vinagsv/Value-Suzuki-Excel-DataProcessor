@@ -12,15 +12,16 @@ const escapeXML = (str) => {
 };
 
 /**
- * Converts Excel data to Tally XML client-side for Journal Entries.
+ * Converts Excel data to Tally XML client-side for Debit Journal Entries.
+ * In a Debit Journal, the summarized Debit entry comes first, followed by the individual Credit entries from the Excel sheet.
  */
-export async function processJournalClientSide(file, dateInput, batchSizeStr, creditLedger, validationEnabled = true) {
+export async function processDrJournalClientSide(file, dateInput, batchSizeStr, debitLedger, validationEnabled = true) {
     if (!file) throw new Error("No file provided.");
     if (!dateInput) throw new Error("Date is required.");
     if (!batchSizeStr || isNaN(parseInt(batchSizeStr, 10)) || parseInt(batchSizeStr, 10) <= 0) {
         throw new Error("Valid Batch Size is required.");
     }
-    if (!creditLedger) throw new Error("Credit Ledger Name is required.");
+    if (!debitLedger || debitLedger.trim() === '') throw new Error("Debit Ledger Name is required.");
 
     const batchSize = parseInt(batchSizeStr, 10);
     const tallyDate = dateInput.replace(/-/g, '');
@@ -51,10 +52,10 @@ export async function processJournalClientSide(file, dateInput, batchSizeStr, cr
     let entryCount = 0;
     let skippedCount = 0;
     let batchCount = 0;
-    const batchTotals = []; // Array to store the total credit amount for each batch
+    const batchTotals = []; // Array to store the total debit amount for each batch
     let skippedRowsDetails = []; // Array to store details about skipped rows
 
-    // Pre-process data to filter out invalid rows based on new rules
+    // Pre-process data to filter out invalid rows based on rules
     const validData = [];
     data.forEach((row, index) => {
         // Skip completely empty rows
@@ -71,7 +72,7 @@ export async function processJournalClientSide(file, dateInput, batchSizeStr, cr
         // Strict validation for AMOUNT: Safely parse numbers that might contain commas from Excel exports
         let parsedAmount = NaN;
         if (typeof rawAmount === 'string') {
-            parsedAmount = parseFloat(rawAmount.trim().replace(/,/g, ''));
+            parsedAmount = parseFloat(rawAmount.replace(/,/g, ''));
         } else if (typeof rawAmount === 'number') {
             parsedAmount = rawAmount;
         }
@@ -107,68 +108,39 @@ export async function processJournalClientSide(file, dateInput, batchSizeStr, cr
         let batchTotalAmount = 0;
         batchCount++;
 
+        // 1. Calculate the total debit amount for the batch in advance
+        batch.forEach(row => {
+            batchTotalAmount += row.amount;
+        });
+        batchTotalAmount = Math.round(batchTotalAmount * 100) / 100;
+        batchTotals.push(batchTotalAmount);
+
+        // Core Tally Message and Voucher Opening
         xmlString += `    <TALLYMESSAGE xmlns:UDF="TallyUDF">\n`;
         xmlString += `     <VOUCHER VCHTYPE="Journal" ACTION="Create" OBJVIEW="Accounting Voucher View">\n`;
         xmlString += `      <DATE>${tallyDate}</DATE>\n`;
-        xmlString += `      <VCHSTATUSDATE>${tallyDate}</VCHSTATUSDATE>\n`;
         xmlString += `      <VOUCHERTYPENAME>Journal</VOUCHERTYPENAME>\n`;
-        xmlString += `      <VCHSTATUSVOUCHERTYPE>Journal</VCHSTATUSVOUCHERTYPE>\n`;
-        xmlString += `      <PERSISTEDVIEW>Accounting Voucher View</PERSISTEDVIEW>\n`;
         xmlString += `      <VCHENTRYMODE>As Voucher</VCHENTRYMODE>\n`;
         xmlString += `      <EFFECTIVEDATE>${tallyDate}</EFFECTIVEDATE>\n`;
-        xmlString += `      <NARRATION>Auto imported from excel, Number of Entries:${batch.length}</NARRATION>\n`;
+        xmlString += `      <NARRATION>${escapeXML('Auto imported from excel, Number of Entries: ' + batch.length)}</NARRATION>\n`;
 
-        // Process Debit Entries for this batch
+        // 2. Add the summarized Debit Entry FIRST (Simplified to prevent validation bugs in Tally)
+        xmlString += `      <ALLLEDGERENTRIES.LIST>\n`;
+        xmlString += `       <LEDGERNAME>${escapeXML(debitLedger)}</LEDGERNAME>\n`;
+        xmlString += `       <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>\n`;
+        xmlString += `       <AMOUNT>-${batchTotalAmount.toFixed(2)}</AMOUNT>\n`;
+        xmlString += `      </ALLLEDGERENTRIES.LIST>\n`;
+
+        // 3. Add the individual Credit Entries from the Excel sheet LATER (Simplified to prevent validation bugs in Tally)
         batch.forEach((row) => {
-            batchTotalAmount += row.amount;
             entryCount++;
             
             xmlString += `      <ALLLEDGERENTRIES.LIST>\n`;
-            xmlString += `       <OLDAUDITENTRYIDS.LIST TYPE="Number">\n        <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>\n       </OLDAUDITENTRYIDS.LIST>\n`;
             xmlString += `       <LEDGERNAME>${escapeXML(row.ledgerName)}</LEDGERNAME>\n`;
-            xmlString += `       <GSTCLASS>&#4; Not Applicable</GSTCLASS>\n`;
-            xmlString += `       <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>\n`;
-            xmlString += `       <LEDGERFROMITEM>No</LEDGERFROMITEM>\n`;
-            xmlString += `       <REMOVEZEROENTRIES>No</REMOVEZEROENTRIES>\n`;
-            xmlString += `       <ISPARTYLEDGER>Yes</ISPARTYLEDGER>\n`;
-            xmlString += `       <GSTOVERRIDDEN>No</GSTOVERRIDDEN>\n`;
-            xmlString += `       <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>\n`;
-            xmlString += `       <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>\n`;
-            xmlString += `       <STRDGSTISPARTYLEDGER>No</STRDGSTISPARTYLEDGER>\n`;
-            xmlString += `       <STRDGSTISDUTYLEDGER>No</STRDGSTISDUTYLEDGER>\n`;
-            xmlString += `       <CONTENTNEGISPOS>No</CONTENTNEGISPOS>\n`;
-            xmlString += `       <ISLASTDEEMEDPOSITIVE>Yes</ISLASTDEEMEDPOSITIVE>\n`;
-            xmlString += `       <ISCAPVATTAXALTERED>No</ISCAPVATTAXALTERED>\n`;
-            xmlString += `       <ISCAPVATNOTCLAIMED>No</ISCAPVATNOTCLAIMED>\n`;
-            xmlString += `       <AMOUNT>-${row.amount.toFixed(2)}</AMOUNT>\n`;
-            xmlString += `       <VATEXPAMOUNT>-${row.amount.toFixed(2)}</VATEXPAMOUNT>\n`;
+            xmlString += `       <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>\n`;
+            xmlString += `       <AMOUNT>${row.amount.toFixed(2)}</AMOUNT>\n`;
             xmlString += `      </ALLLEDGERENTRIES.LIST>\n`;
         });
-
-        // Process Credit Entry for this batch (Total)
-        batchTotalAmount = Math.round(batchTotalAmount * 100) / 100;
-        batchTotals.push(batchTotalAmount); // Store this batch's total credit amount
-
-        xmlString += `      <ALLLEDGERENTRIES.LIST>\n`;
-        xmlString += `       <OLDAUDITENTRYIDS.LIST TYPE="Number">\n        <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>\n       </OLDAUDITENTRYIDS.LIST>\n`;
-        xmlString += `       <LEDGERNAME>${escapeXML(creditLedger)}</LEDGERNAME>\n`;
-        xmlString += `       <GSTCLASS>&#4; Not Applicable</GSTCLASS>\n`;
-        xmlString += `       <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>\n`;
-        xmlString += `       <LEDGERFROMITEM>No</LEDGERFROMITEM>\n`;
-        xmlString += `       <REMOVEZEROENTRIES>No</REMOVEZEROENTRIES>\n`;
-        xmlString += `       <ISPARTYLEDGER>No</ISPARTYLEDGER>\n`;
-        xmlString += `       <GSTOVERRIDDEN>No</GSTOVERRIDDEN>\n`;
-        xmlString += `       <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>\n`;
-        xmlString += `       <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>\n`;
-        xmlString += `       <STRDGSTISPARTYLEDGER>No</STRDGSTISPARTYLEDGER>\n`;
-        xmlString += `       <STRDGSTISDUTYLEDGER>No</STRDGSTISDUTYLEDGER>\n`;
-        xmlString += `       <CONTENTNEGISPOS>No</CONTENTNEGISPOS>\n`;
-        xmlString += `       <ISLASTDEEMEDPOSITIVE>No</ISLASTDEEMEDPOSITIVE>\n`;
-        xmlString += `       <ISCAPVATTAXALTERED>No</ISCAPVATTAXALTERED>\n`;
-        xmlString += `       <ISCAPVATNOTCLAIMED>No</ISCAPVATNOTCLAIMED>\n`;
-        xmlString += `       <AMOUNT>${batchTotalAmount.toFixed(2)}</AMOUNT>\n`;
-        xmlString += `       <VATEXPAMOUNT>${batchTotalAmount.toFixed(2)}</VATEXPAMOUNT>\n`;
-        xmlString += `      </ALLLEDGERENTRIES.LIST>\n`;
 
         xmlString += `     </VOUCHER>\n`;
         xmlString += `    </TALLYMESSAGE>\n`;
