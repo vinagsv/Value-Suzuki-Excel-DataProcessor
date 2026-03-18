@@ -7,14 +7,15 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['suzuki-logo.png'], // Keep other static assets you want cached
+      injectRegister: 'auto', // Ensures the service worker is injected into index.html
+      includeAssets: ['suzuki-logo.png'], 
       manifest: {
         name: 'Value One',
         short_name: 'Value One',
         description: 'Value Motor Agency Receipt & Management System',
         theme_color: '#4f63f0',
         background_color: '#ffffff',
-        display: 'standalone', // Essential for the native app feel on mobile
+        display: 'standalone', 
         icons: [
           {
             src: '/icon-192x192.png', 
@@ -27,6 +28,11 @@ export default defineConfig({
             type: 'image/png'
           }
         ]
+      },
+      // BLOCK TO TEST PWA IN LOCALHOST:
+      devOptions: {
+        enabled: true, 
+        type: 'module',
       }
     })
   ],
