@@ -4,7 +4,7 @@ import { ToWords } from 'to-words';
 import { Printer, RefreshCw, Edit3, WifiOff, Calendar, Ban, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import DaySummary from './DaySummary';
-import tailwindStyles from '../index.css?inline'; 
+import tailwindStyles from '../index.css?inline';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -12,6 +12,8 @@ const toWords = new ToWords({
   localeCode: 'en-IN',
   converterOptions: { currency: false, ignoreDecimal: false, ignoreZeroCurrency: false, doNotAddOnly: true },
 });
+
+const isMobile = () => window.innerWidth < 1024;
 
 const Receipt = ({ theme }) => {
   const isDark = theme === 'dark';
@@ -24,14 +26,14 @@ const Receipt = ({ theme }) => {
     date: new Date().toISOString().split('T')[0],
     customerName: '',
     mobile: '',
-    fileNoSeq: '', 
+    fileNoSeq: '',
     hp: '',
     model: '',
     amount: '',
     paymentType: 'Booking',
     customPaymentType: '',
     paymentMode: 'Cash',
-    dated: '', 
+    dated: '',
     chequeNo: '',
     remarks: '',
     status: 'ACTIVE'
@@ -41,7 +43,7 @@ const Receipt = ({ theme }) => {
   const [filePrefix, setFilePrefix] = useState('');
   const [currentFilePrefix, setCurrentFilePrefix] = useState('');
   const [isEditing, setIsEditing] = useState(false);
-  const [history, setHistory] = useState([]); 
+  const [history, setHistory] = useState([]);
   const [availableMonths, setAvailableMonths] = useState([]);
   const [exportRange, setExportRange] = useState({ from: '', to: '' });
   const [serverError, setServerError] = useState(false);
@@ -49,22 +51,17 @@ const Receipt = ({ theme }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
 
-  // A4 at 96dpi ≈ 794px wide.
-  // The receipt border width in the print layout = 200mm (210 - 5mm×2 padding).
-  // In pixels: (200/210) × 794 ≈ 756px.
-  // Receipt height in print: 120mm = (120/297) × 1123 ≈ 454px.
   const A4_W_PX = 794;
-  const PAGE_PAD_PX = Math.round((5 / 210) * A4_W_PX);   // 5mm page padding → ~19px
-  const RECEIPT_W_PX = A4_W_PX - PAGE_PAD_PX * 2;        // ~756px
-  const RECEIPT_H_PX = Math.round((120 / 297) * 1123);     // ~454px
+  const PAGE_PAD_PX = Math.round((5 / 210) * A4_W_PX);
+  const RECEIPT_W_PX = A4_W_PX - PAGE_PAD_PX * 2;
+  const RECEIPT_H_PX = Math.round((120 / 297) * 1123);
   const LABEL_H_PX = 20;
   const PREVIEW_NATURAL_H = RECEIPT_H_PX + LABEL_H_PX + 8;
 
-  // ResizeObserver: recompute scale whenever the preview panel resizes
   useEffect(() => {
     const computeScale = () => {
       if (previewPanelRef.current) {
-        const panelW = previewPanelRef.current.clientWidth - 32; // 16px padding each side
+        const panelW = previewPanelRef.current.clientWidth - 32;
         setPreviewScale(Math.min(panelW / A4_W_PX, 1.0));
       }
     };
@@ -88,10 +85,10 @@ const Receipt = ({ theme }) => {
       setFilePrefix(data.prefix || '');
       setCurrentFilePrefix(data.prefix || '');
       setFormData(prev => ({ ...prev, receiptNo: String(data.nextReceiptNo || '---'), fileNoSeq: '' }));
-      setServerError(false); 
+      setServerError(false);
     } catch {
       setFormData(prev => ({ ...prev, receiptNo: 'OFFLINE' }));
-      setServerError(true); 
+      setServerError(true);
     }
   };
 
@@ -104,7 +101,7 @@ const Receipt = ({ theme }) => {
       setServerError(false);
     } catch {
       setHistory([]);
-      setServerError(true); 
+      setServerError(true);
     }
   };
 
@@ -141,10 +138,10 @@ const Receipt = ({ theme }) => {
     if (Array.isArray(history) && rawInput.length >= 3) {
       const match = history.find(item => (item.file_no || '').replace(/\s/g, '') === cleanCombined);
       if (match) {
-        setFormData(prev => ({ 
-          ...prev, 
-          customerName: match.customer_name, 
-          mobile: match.mobile || '', 
+        setFormData(prev => ({
+          ...prev,
+          customerName: match.customer_name,
+          mobile: match.mobile || '',
           model: match.model || '',
           hp: match.hp_financier || ''
         }));
@@ -184,7 +181,7 @@ const Receipt = ({ theme }) => {
       date: item.date ? item.date.substring(0, 10) : new Date().toISOString().split('T')[0],
       customerName: item.customer_name,
       mobile: item.mobile || '',
-      fileNoSeq: loadedSeq, 
+      fileNoSeq: loadedSeq,
       hp: item.hp_financier || '',
       model: item.model || '',
       amount: item.amount,
@@ -239,7 +236,8 @@ const Receipt = ({ theme }) => {
     } catch { if (window.toast) window.toast("Error saving receipt. Please check connection.", "error"); }
   };
 
-  const handlePrint = useReactToPrint({
+  // ─── DESKTOP PRINT (react-to-print) ──────────────────────────────────────
+  const handlePrintDesktop = useReactToPrint({
     contentRef: componentRef,
     documentTitle: `Receipt_${formData.receiptNo}`,
     onBeforeGetContent: () => {
@@ -248,6 +246,170 @@ const Receipt = ({ theme }) => {
     },
     onAfterPrint: () => saveToDb()
   });
+
+  // ─── MOBILE PRINT (new window) ────────────────────────────────────────────
+  const handleMobilePrint = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      if (window.toast) window.toast("Please allow popups to print.", "error");
+      return;
+    }
+
+    const fullFileNo = currentFilePrefix + formData.fileNoSeq;
+    const amtWords = formData.amount && !isNaN(formData.amount)
+      ? toWords.convert(formData.amount).toUpperCase() + " ONLY"
+      : 'ZERO ONLY';
+    const payType = formData.paymentType === 'Other' ? formData.customPaymentType : formData.paymentType;
+    const isCancelled = formData.status === 'CANCELLED';
+
+    const receiptBlock = (label, marginLeft) => `
+      <div class="page" style="margin-left:${marginLeft}">
+        <div class="copy-label">${label}</div>
+        <div class="receipt-box">
+          ${isCancelled ? `<div class="cancelled-stamp"><div class="cancelled-inner">CANCELLED</div></div>` : ''}
+          <div class="watermark"><img src="/suzuki-logo.png" alt=""/></div>
+          <div class="content">
+            <div class="hdr">
+              <div class="hdr-left">
+                <img src="/suzuki-logo.png" alt="Suzuki" style="width:150px;max-width:100%;"/>
+                <div class="gst">GST NO: 29AACCV2521J1ZA</div>
+              </div>
+              <div class="hdr-right">
+                <div class="co-name">VALUE MOTOR AGENCY PVT LTD</div>
+                <div class="co-addr">#16/A, MILLERS ROAD, VASANTH NAGAR, BANGALORE - 52</div>
+                <div class="co-addr">Mob: 9845906084 | Email: millers_road_suzuki@yahoo.com</div>
+              </div>
+            </div>
+            <div class="title-bar"><span>RECEIPT</span></div>
+            <div class="meta-row">
+              <div>NO:<span class="rno">${formData.receiptNo}</span></div>
+              <div class="meta-right">
+                ${fullFileNo.trim() ? `<span>File Number: <strong>${fullFileNo}</strong></span>` : ''}
+                <span>DATE: <strong>${formatDate(formData.date)}</strong></span>
+              </div>
+            </div>
+            <div class="fields">
+              <div class="field-row">
+                <span class="flabel">RECEIVED WITH THANKS FROM:</span>
+                <span class="fval name">${formData.customerName}</span>
+              </div>
+              <div>
+                <div class="flabel" style="font-size:11px;margin-bottom:1px;">THE SUM OF RUPEES:</div>
+                <div class="amt-words">${amtWords}</div>
+              </div>
+              <div class="flex-row">
+                ${formData.model ? `<div class="field-row f1"><span class="flabel">MODEL:</span><span class="fval">${formData.model}</span></div>` : ''}
+                <div class="field-row f1"><span class="flabel">ON ACCOUNT OF:</span><span class="fval">${payType}</span></div>
+                <div class="field-row f1"><span class="flabel">BY WAY OF:</span><span class="fval">${formData.paymentMode}</span></div>
+              </div>
+              ${formData.hp ? `<div class="field-row"><span class="flabel">H.P. TO:</span><span class="fval">${formData.hp}</span></div>` : ''}
+              ${formData.mobile ? `<div class="field-row"><span class="flabel">MOBILE NO:</span><span class="fval">${formData.mobile}</span></div>` : ''}
+            </div>
+            <div class="bottom">
+              <div class="amt-sig-row">
+                <div class="amt-left">
+                  <div class="flex-row" style="align-items:center;gap:12px;">
+                    <div class="amt-box">₹ ${Number(formData.amount).toLocaleString('en-IN')}/-</div>
+                    ${formData.dated ? `<span style="font-weight:bold;font-size:11px;">DATED: ${formatDate(formData.dated)}</span>` : ''}
+                  </div>
+                  ${formData.chequeNo ? `<div style="font-size:11px;font-style:italic;margin-top:3px;">Cheque/Ref No: <strong>${formData.chequeNo}</strong></div>` : ''}
+                  ${formData.remarks ? `<div style="font-size:11px;margin-top:2px;word-break:break-word;">REMARKS: <strong>${formData.remarks}</strong></div>` : ''}
+                </div>
+                <div class="sig">
+                  <div class="sig-for">For <strong>VALUE MOTOR AGENCY PVT LTD</strong></div>
+                  <div class="sig-line">Authorised Signatory</div>
+                </div>
+              </div>
+            </div>
+            <div class="footer">
+              <div class="f-bank">WE BANK WITH STATE BANK OF INDIA | A/C NO: 32744599339 | IFSC: SBIN0021882 | BRANCH: VASANTHNAGAR</div>
+              <div class="f-note">NOTE: CHEQUES SUBJECT TO REALISATION. PRICES PREVAILING AT THE TIME OF DELIVERY APPLICABLE. ANY CANCELLATION SUBJECT TO 10% DEDUCTION.</div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Receipt_${formData.receiptNo}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:sans-serif;background:white;}
+    @page{size:A4 portrait;margin:5mm;}
+    .page{width:200mm;}
+    .copy-label{text-align:right;font-weight:bold;font-size:10px;text-transform:uppercase;padding:4px 0 2px;letter-spacing:.15em;color:#6b7280;}
+    .receipt-box{width:200mm;height:120mm;border:3px solid black;border-radius:8px;box-sizing:border-box;background:white;color:black;position:relative;overflow:hidden;padding:4mm;display:flex;flex-direction:column;}
+    .page+.page{margin-top:12mm;}
+    .watermark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:.07;z-index:0;}
+    .watermark img{width:66%;}
+    .cancelled-stamp{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:50;pointer-events:none;}
+    .cancelled-inner{border:4px solid rgba(239,68,68,.3);color:rgba(239,68,68,.3);font-size:48px;font-weight:900;transform:rotate(-45deg);padding:12px;border-radius:12px;letter-spacing:.1em;line-height:1;}
+    .content{position:relative;z-index:10;display:flex;flex-direction:column;height:100%;}
+    .hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px;}
+    .hdr-left{width:45%;}
+    .gst{font-weight:bold;margin-top:2px;font-size:11px;}
+    .hdr-right{width:55%;text-align:right;}
+    .co-name{font-size:16px;font-weight:900;text-transform:uppercase;line-height:1.2;}
+    .co-addr{font-size:8px;font-weight:bold;margin-top:2px;letter-spacing:.04em;}
+    .title-bar{border-bottom:2px solid black;text-align:center;margin-bottom:3px;padding-bottom:1px;}
+    .title-bar span{font-size:18px;font-weight:bold;text-transform:uppercase;letter-spacing:.2em;}
+    .meta-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:12px;font-weight:bold;}
+    .meta-right{display:flex;align-items:center;gap:16px;}
+    .rno{color:#dc2626;font-size:16px;margin-left:6px;}
+    .fields{display:flex;flex-direction:column;gap:3px;}
+    .field-row{display:flex;align-items:flex-end;}
+    .f1{flex:1;}
+    .flabel{font-weight:bold;margin-right:6px;white-space:nowrap;font-size:10px;}
+    .fval{border-bottom:1px dotted black;flex-grow:1;padding:0 6px;font-size:12px;text-transform:uppercase;}
+    .fval.name{font-weight:900;font-size:15px;color:#1e3a8a;line-height:1.2;}
+    .amt-words{font-weight:bold;font-size:14px;font-style:italic;text-transform:uppercase;word-break:break-word;padding:0 6px;}
+    .flex-row{display:flex;gap:10px;flex-wrap:wrap;}
+    .bottom{flex:1;display:flex;flex-direction:column;justify-content:center;}
+    .amt-sig-row{display:flex;align-items:flex-end;justify-content:space-between;}
+    .amt-left{display:flex;flex-direction:column;flex:1;padding-right:12px;}
+    .amt-box{border:2px solid black;padding:4px 12px;font-size:18px;font-weight:900;background:#f9fafb;white-space:nowrap;letter-spacing:.05em;line-height:1;display:inline-block;}
+    .sig{text-align:center;display:flex;flex-direction:column;align-items:center;flex-shrink:0;}
+    .sig-for{font-size:10px;margin-bottom:2px;}
+    .sig-line{border-top:2px solid black;padding:2px 20px 0;display:inline-block;font-size:10px;font-weight:bold;margin-top:10mm;}
+    .footer{margin-top:3px;padding-top:2px;border-top:1px solid #9ca3af;}
+    .f-bank{font-size:8px;font-weight:900;color:#1f2937;text-transform:uppercase;line-height:1.3;letter-spacing:.04em;}
+    .f-note{font-size:7px;font-weight:900;color:black;text-transform:uppercase;margin-top:1px;letter-spacing:.06em;}
+  </style>
+</head>
+<body>
+  ${receiptBlock('CUSTOMER COPY', '0')}
+  ${receiptBlock('OFFICE COPY', '15mm')}
+  <script>
+    window.onload=function(){setTimeout(function(){window.print();},500);};
+  </script>
+</body>
+</html>`;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    saveToDb();
+  };
+
+  // ─── UNIFIED handlePrint ──────────────────────────────────────────────────
+  const handlePrint = () => {
+    if (serverError) { if (window.toast) window.toast("System Offline: Cannot print.", "error"); return; }
+    if (!formData.amount || isNaN(formData.amount)) { if (window.toast) window.toast("Please enter a valid amount.", "error"); return; }
+    if (isMobile()) {
+      handleMobilePrint();
+    } else {
+      handlePrintDesktop();
+    }
+  };
+
+  const amountInWords = formData.amount && !isNaN(formData.amount)
+    ? toWords.convert(formData.amount).toUpperCase() + " ONLY"
+    : 'ZERO ONLY';
+
+  const hasValue = (val) => val && String(val).trim().length > 0;
+  const fullFileNo = currentFilePrefix + formData.fileNoSeq;
 
   const handleExport = () => {
     let data = history;
@@ -276,13 +438,6 @@ const Receipt = ({ theme }) => {
     XLSX.writeFile(workbook, `Receipts_Report.xlsx`);
   };
 
-  const amountInWords = formData.amount && !isNaN(formData.amount)
-    ? toWords.convert(formData.amount).toUpperCase() + " ONLY"
-    : 'ZERO ONLY';
-
-  const hasValue = (val) => val && String(val).trim().length > 0;
-  const fullFileNo = currentFilePrefix + formData.fileNoSeq;
-
   const inputClass = `w-full p-1.5 rounded border text-sm ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"} focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed`;
   const labelClass = `block text-[10px] font-bold uppercase mb-0.5 ${isDark ? "text-gray-400" : "text-gray-600"}`;
   const tableHeaderClass = `px-4 py-2 text-left text-xs font-semibold ${isDark ? "text-gray-300 bg-gray-700" : "text-gray-600 bg-gray-100"}`;
@@ -295,7 +450,6 @@ const Receipt = ({ theme }) => {
       boxSizing: 'border-box', padding: '4mm',
       display: 'flex', flexDirection: 'column', overflow: 'hidden'
     }}>
-      {/* CANCELLED watermark */}
       {formData.status === 'CANCELLED' && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, pointerEvents: 'none' }}>
           <div style={{ border: '4px solid rgba(239,68,68,0.3)', color: 'rgba(239,68,68,0.3)', fontSize: '64px', fontWeight: 900, transform: 'rotate(-45deg)', padding: '16px', borderRadius: '12px', letterSpacing: '0.1em', userSelect: 'none', lineHeight: 1 }}>
@@ -303,12 +457,10 @@ const Receipt = ({ theme }) => {
           </div>
         </div>
       )}
-      {/* BG watermark */}
       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', opacity: 0.07, zIndex: 0 }}>
         <img src="/suzuki-logo.png" alt="" style={{ width: '66%' }} />
       </div>
 
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2px', position: 'relative', zIndex: 10 }}>
         <div style={{ width: '45%' }}>
           <img src="/suzuki-logo.png" alt="Suzuki" style={{ width: '180px', maxWidth: '100%' }} />
@@ -321,12 +473,10 @@ const Receipt = ({ theme }) => {
         </div>
       </div>
 
-      {/* RECEIPT title */}
       <div style={{ borderBottom: '2px solid black', textAlign: 'center', marginBottom: '3px', paddingBottom: '1px' }}>
         <span style={{ fontSize: '20px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.2em' }}>RECEIPT</span>
       </div>
 
-      {/* No / File / Date */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', fontSize: '13px', fontWeight: 'bold', position: 'relative', zIndex: 10 }}>
         <div>NO: <span style={{ color: '#dc2626', fontSize: '18px', marginLeft: '8px' }}>{formData.receiptNo}</span></div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
@@ -339,34 +489,17 @@ const Receipt = ({ theme }) => {
         </div>
       </div>
 
-      {/* Body fields */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', position: 'relative', zIndex: 10, marginTop: '2px' }}>
-
         <div style={{ display: 'flex', alignItems: 'flex-end' }}>
           <span style={{ fontWeight: 'bold', marginRight: '8px', whiteSpace: 'nowrap', fontSize: '13px' }}>RECEIVED WITH THANKS FROM:</span>
           <span style={{ borderBottom: '1px dotted black', flexGrow: 1, padding: '0 8px', fontWeight: 900, fontSize: '18px', textTransform: 'uppercase', lineHeight: 1.2, color: '#1e3a8a' }}>{formData.customerName}</span>
         </div>
-
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <span style={{ fontWeight: 'bold', fontSize: '12px', marginBottom: '1px', letterSpacing: '0.04em' }}>THE SUM OF RUPEES:</span>
-          <div style={{
-            width: '100%',
-            padding: '0 8px',
-            fontWeight: 'bold',
-            fontSize: '17px', 
-            fontStyle: 'italic',
-            textTransform: 'uppercase',
-            lineHeight: '28px',
-            minHeight: '28px',
-            wordBreak: 'break-word',
-            backgroundImage: 'radial-gradient(circle at 1px 26px, black 1px, transparent 1px)',
-            backgroundSize: '4px 28px',
-            backgroundRepeat: 'repeat'
-          }}>
+          <div style={{ width: '100%', padding: '0 8px', fontWeight: 'bold', fontSize: '17px', fontStyle: 'italic', textTransform: 'uppercase', lineHeight: '28px', minHeight: '28px', wordBreak: 'break-word', backgroundImage: 'radial-gradient(circle at 1px 26px, black 1px, transparent 1px)', backgroundSize: '4px 28px', backgroundRepeat: 'repeat' }}>
             {amountInWords}
           </div>
         </div>
-
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '20px', flexWrap: 'wrap' }}>
           {hasValue(formData.model) && (
             <div style={{ display: 'flex', alignItems: 'flex-end' }}>
@@ -382,19 +515,15 @@ const Receipt = ({ theme }) => {
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
             <span style={{ fontWeight: 'bold', marginRight: '6px', whiteSpace: 'nowrap', fontSize: '11px' }}>BY WAY OF:</span>
-            <span style={{ borderBottom: '1px dotted black', padding: '0 8px', fontWeight: 'bold', fontSize: '14px', textTransform: 'uppercase', minWidth: '120px', textAlign: 'center' }}>
-              {formData.paymentMode}
-            </span>
+            <span style={{ borderBottom: '1px dotted black', padding: '0 8px', fontWeight: 'bold', fontSize: '14px', textTransform: 'uppercase', minWidth: '120px', textAlign: 'center' }}>{formData.paymentMode}</span>
           </div>
         </div>
-
         {hasValue(formData.hp) && (
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
             <span style={{ fontWeight: 'bold', marginRight: '6px', whiteSpace: 'nowrap', fontSize: '11px' }}>H.P. TO:</span>
             <span style={{ borderBottom: '1px dotted black', padding: '0 8px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', minWidth: '150px', textAlign: 'center' }}>{formData.hp}</span>
           </div>
         )}
-
         {hasValue(formData.mobile) && (
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
             <span style={{ fontWeight: 'bold', marginRight: '6px', whiteSpace: 'nowrap', fontSize: '11px' }}>MOBILE NO:</span>
@@ -403,10 +532,8 @@ const Receipt = ({ theme }) => {
         )}
       </div>
 
-      {/* Wrapper for vertical centering of Amount + Signature */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', position: 'relative', zIndex: 10 }}>
-          
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, paddingRight: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <div style={{ border: '2px solid black', padding: '4px 14px', fontSize: '21px', fontWeight: 900, backgroundColor: '#f9fafb', whiteSpace: 'nowrap', letterSpacing: '0.05em', lineHeight: 1 }}>
@@ -429,7 +556,6 @@ const Receipt = ({ theme }) => {
               </div>
             )}
           </div>
-
           <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', flexShrink: 0 }}>
             <div style={{ fontSize: '11px', marginBottom: '2px', letterSpacing: '0.04em' }}>
               <span style={{ fontWeight: 500 }}>For</span>{' '}
@@ -440,11 +566,9 @@ const Receipt = ({ theme }) => {
               Authorised Signatory
             </div>
           </div>
-          
         </div>
       </div>
 
-      {/* Footer */}
       <div style={{ marginTop: '4px', paddingTop: '3px', borderTop: '1px solid #9ca3af', position: 'relative', zIndex: 10 }}>
         <div style={{ fontSize: '9px', fontWeight: 900, color: '#1f2937', textTransform: 'uppercase', lineHeight: 1.3, letterSpacing: '0.04em' }}>
           WE BANK WITH STATE BANK OF INDIA | A/C NO: 32744599339 | IFSC: SBIN0021882 | BRANCH: VASANTHNAGAR
@@ -460,62 +584,21 @@ const Receipt = ({ theme }) => {
   const renderPrintLayout = () => (
     <div
       ref={componentRef}
-      style={{
-        width: '210mm',
-        minHeight: '297mm',
-        padding: '5mm',
-        boxSizing: 'border-box',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12mm',
-        backgroundColor: 'white',
-        fontFamily: 'sans-serif',
-      }}
+      style={{ width: '210mm', minHeight: '297mm', padding: '5mm', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '12mm', backgroundColor: 'white', fontFamily: 'sans-serif' }}
     >
       <style type="text/css" media="print">
         {tailwindStyles}
-        {`
-          @page { size: A4 portrait; margin: 0mm !important; }
-          html, body {
-            margin: 0 !important; padding: 0 !important;
-            background: white;
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
-          }
-          .print-root {
-            width: 210mm !important; min-height: 297mm !important;
-            padding: 5mm !important; box-sizing: border-box !important;
-            display: flex !important; flex-direction: column !important;
-            gap: 12mm !important; background: white !important;
-          }
-        `}
+        {`@page { size: A4 portrait; margin: 0mm !important; } html, body { margin: 0 !important; padding: 0 !important; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .print-root { width: 210mm !important; min-height: 297mm !important; padding: 5mm !important; box-sizing: border-box !important; display: flex !important; flex-direction: column !important; gap: 12mm !important; background: white !important; }`}
       </style>
-
-      {/* CUSTOMER COPY — 200mm × 120mm */}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '10px', textTransform: 'uppercase', marginBottom: '1mm', letterSpacing: '0.15em', color: '#6b7280' }}>
-          CUSTOMER COPY
-        </div>
-        <div style={{
-          width: '200mm', height: '120mm',
-          border: '3px solid black', borderRadius: '8px',
-          boxSizing: 'border-box', backgroundColor: 'white',
-          color: 'black', position: 'relative', overflow: 'hidden',
-        }}>
+        <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '10px', textTransform: 'uppercase', marginBottom: '1mm', letterSpacing: '0.15em', color: '#6b7280' }}>CUSTOMER COPY</div>
+        <div style={{ width: '200mm', height: '120mm', border: '3px solid black', borderRadius: '8px', boxSizing: 'border-box', backgroundColor: 'white', color: 'black', position: 'relative', overflow: 'hidden' }}>
           {renderReceiptBody()}
         </div>
       </div>
-
-      {/* OFFICE COPY — 185mm × 120mm, left-indented 15mm for punch holes */}
       <div style={{ display: 'flex', flexDirection: 'column', marginLeft: '15mm' }}>
-        <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '10px', textTransform: 'uppercase', marginBottom: '1mm', letterSpacing: '0.15em', color: '#6b7280' }}>
-          OFFICE COPY
-        </div>
-        <div style={{
-          width: '185mm', height: '120mm',
-          border: '3px solid black', borderRadius: '8px',
-          boxSizing: 'border-box', backgroundColor: 'white',
-          color: 'black', position: 'relative', overflow: 'hidden',
-        }}>
+        <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '10px', textTransform: 'uppercase', marginBottom: '1mm', letterSpacing: '0.15em', color: '#6b7280' }}>OFFICE COPY</div>
+        <div style={{ width: '185mm', height: '120mm', border: '3px solid black', borderRadius: '8px', boxSizing: 'border-box', backgroundColor: 'white', color: 'black', position: 'relative', overflow: 'hidden' }}>
           {renderReceiptBody()}
         </div>
       </div>
@@ -530,9 +613,9 @@ const Receipt = ({ theme }) => {
         {/* Top bar */}
         <div className={`mb-8 flex flex-col sm:flex-row justify-between items-center p-4 rounded-2xl shadow-lg gap-4 ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-gradient-to-r from-blue-100 to-indigo-100 border border-blue-200'}`}>
           <div className="w-full sm:w-[400px] relative z-30">
-            <input 
+            <input
               type="text" value={searchTerm} onChange={handleSearchInput}
-              placeholder="Search by File No, Name..." 
+              placeholder="Search by File No, Name..."
               className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm shadow-inner focus:ring-2 outline-none transition-all border backdrop-blur-md ${isDark ? 'bg-white/10 border-white/20 text-white focus:ring-white/50 placeholder-gray-300' : 'bg-white/50 border-white/60 text-gray-800 focus:ring-blue-500 placeholder-gray-600'}`}
             />
             <Search className={`absolute left-3 top-3 ${isDark ? 'text-gray-300' : 'text-gray-500'}`} size={18} />
@@ -560,7 +643,6 @@ const Receipt = ({ theme }) => {
         </div>
 
         <div className="flex flex-col lg:flex-row gap-4 mb-8">
-
           {/* ── LEFT: FORM ── */}
           <div className={`w-full lg:w-[380px] lg:flex-shrink-0 p-4 rounded-xl shadow-lg h-fit ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"} border`}>
             {serverError && (
@@ -584,10 +666,9 @@ const Receipt = ({ theme }) => {
                 </button>
               </div>
             </div>
-            
+
             <div className="space-y-2">
               <fieldset disabled={serverError} className="space-y-2">
-                
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className={labelClass}>Date</label><input type="date" name="date" value={formData.date} onChange={handleChange} className={inputClass} /></div>
                   <div>
@@ -599,7 +680,6 @@ const Receipt = ({ theme }) => {
                     </div>
                   </div>
                 </div>
-
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className={labelClass}>Amount (₹)</label><input type="number" name="amount" value={formData.amount} onChange={handleChange} autoComplete="off" className={inputClass} /></div>
                   <div>
@@ -609,9 +689,7 @@ const Receipt = ({ theme }) => {
                     </select>
                   </div>
                 </div>
-
                 <div><label className={labelClass}>Customer Name</label><input name="customerName" value={formData.customerName} onChange={handleChange} autoComplete="off" className={inputClass} /></div>
-                
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className={labelClass}>On Account Of</label>
@@ -624,24 +702,20 @@ const Receipt = ({ theme }) => {
                   </div>
                   <div><label className={labelClass}>Model</label><input name="model" value={formData.model} onChange={handleChange} autoComplete="on" className={inputClass} /></div>
                 </div>
-
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className={labelClass}>Mobile Number</label><input name="mobile" value={formData.mobile} onChange={handleChange} autoComplete="off" className={inputClass} /></div>
                   <div><label className={labelClass}>HP To</label><input name="hp" value={formData.hp} onChange={handleChange} autoComplete="on" className={inputClass} /></div>
                 </div>
-
                 <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
                   <div><label className={labelClass}>Cheque / Ref No</label><input name="chequeNo" value={formData.chequeNo} onChange={handleChange} autoComplete="off" className={inputClass} placeholder="Optional" /></div>
                   <div><label className={labelClass}>Dated (Optional)</label><input type="date" name="dated" value={formData.dated} onChange={handleChange} className={inputClass} /></div>
                 </div>
-                
                 <div>
                   <label className={labelClass}>Remarks</label>
                   <input name="remarks" value={formData.remarks} onChange={handleChange} autoComplete="off" className={inputClass} placeholder="Any additional notes..." />
                 </div>
-
               </fieldset>
-              
+
               <button
                 onClick={handlePrint} disabled={serverError}
                 className={`w-full mt-3 font-bold py-2.5 px-4 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all ${
@@ -656,54 +730,18 @@ const Receipt = ({ theme }) => {
             </div>
           </div>
 
-          {/* ── RIGHT: PREVIEW ── */}
+          {/* ── RIGHT: PREVIEW (desktop only) ── */}
           <div
             ref={previewPanelRef}
             className={`hidden lg:flex w-full lg:flex-1 rounded-xl p-4 overflow-hidden items-start justify-center ${isDark ? "bg-gray-700/50" : "bg-gray-200"}`}
           >
-            <div style={{
-              width: '100%',
-              height: `${PREVIEW_NATURAL_H * previewScale}px`,
-              position: 'relative',
-            }}>
-              <div style={{
-                position: 'absolute',
-                top: 0,
-                left: '50%',
-                transform: `translateX(-${(A4_W_PX * previewScale) / 2}px) scale(${previewScale})`,
-                transformOrigin: 'top left',
-                width: `${A4_W_PX}px`,
-              }}>
-                {/* Paper background with 5mm side padding (matching print) */}
-                <div style={{
-                  backgroundColor: 'white',
-                  borderRadius: '6px',
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.22)',
-                  padding: `0 ${PAGE_PAD_PX}px`,
-                  boxSizing: 'border-box',
-                  width: `${A4_W_PX}px`,
-                }}>
-                  {/* Copy label */}
-                  <div style={{
-                    textAlign: 'right', fontWeight: 'bold', fontSize: '10px',
-                    textTransform: 'uppercase', padding: '6px 4px 2px',
-                    letterSpacing: '0.15em', color: '#6b7280',
-                  }}>
+            <div style={{ width: '100%', height: `${PREVIEW_NATURAL_H * previewScale}px`, position: 'relative' }}>
+              <div style={{ position: 'absolute', top: 0, left: '50%', transform: `translateX(-${(A4_W_PX * previewScale) / 2}px) scale(${previewScale})`, transformOrigin: 'top left', width: `${A4_W_PX}px` }}>
+                <div style={{ backgroundColor: 'white', borderRadius: '6px', boxShadow: '0 8px 32px rgba(0,0,0,0.22)', padding: `0 ${PAGE_PAD_PX}px`, boxSizing: 'border-box', width: `${A4_W_PX}px` }}>
+                  <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '10px', textTransform: 'uppercase', padding: '6px 4px 2px', letterSpacing: '0.15em', color: '#6b7280' }}>
                     CUSTOMER COPY — PREVIEW
                   </div>
-                  {/* Receipt border box: RECEIPT_W_PX × RECEIPT_H_PX */}
-                  <div style={{
-                    width: `${RECEIPT_W_PX}px`,
-                    height: `${RECEIPT_H_PX}px`,
-                    border: '3px solid black',
-                    borderRadius: '8px',
-                    boxSizing: 'border-box',
-                    backgroundColor: 'white',
-                    color: 'black',
-                    position: 'relative',
-                    overflow: 'hidden',
-                    marginBottom: '6px',
-                  }}>
+                  <div style={{ width: `${RECEIPT_W_PX}px`, height: `${RECEIPT_H_PX}px`, border: '3px solid black', borderRadius: '8px', boxSizing: 'border-box', backgroundColor: 'white', color: 'black', position: 'relative', overflow: 'hidden', marginBottom: '6px' }}>
                     {renderReceiptBody()}
                   </div>
                 </div>
@@ -759,13 +797,12 @@ const Receipt = ({ theme }) => {
             </table>
           </div>
         </div>
-      </div> {/* End of no-print wrapper */}
+      </div>
 
-      {/* Hidden print target for desktop react-to-print OR mobile native print */}
+      {/* Hidden print target for desktop react-to-print */}
       <div className="print-only" style={{ position: 'absolute', overflow: 'hidden', height: 0, width: 0, top: '-9999px', left: '-9999px' }}>
         {renderPrintLayout()}
       </div>
-
     </div>
   );
 };
