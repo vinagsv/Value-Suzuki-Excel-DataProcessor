@@ -345,6 +345,14 @@ const NavbarStyle = () => (
     .nb-root.light .nb-dropdown-btn.logout:hover { background: rgba(239,68,68,0.1); }
     .nb-root.dark .nb-dropdown-btn.logout:hover { background: rgba(239,68,68,0.15); }
 
+    /* ── MOBILE LAYOUT RESTRICTIONS ── */
+    @media (max-width: 1024px) {
+      .nb-nav-wrap { display: none !important; }
+      .nb-action-btn.is-calc { display: none !important; }
+      .nb-dropdown-btn:not(.logout) { display: none !important; }
+      .nb-actions { border-left: none !important; padding-left: 0 !important; }
+      .nb-root { justify-content: space-between; }
+    }
   `}</style>
 );
 

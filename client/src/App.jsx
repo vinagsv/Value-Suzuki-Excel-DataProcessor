@@ -97,6 +97,23 @@ function App() {
     return () => window.removeEventListener('auth:session-expired', handleSessionExpiry);
   }, []);
 
+  // --- FORCE MOBILE LAYOUT ---
+  useEffect(() => {
+    const enforceMobileLayout = () => {
+      if (window.innerWidth < 1024) {
+        setActivePage("receipt"); // Force receipt page on mobile
+        setIsCalcOpen(false);     // Force calculator closed on mobile
+      }
+    };
+
+    // Check on initial load
+    enforceMobileLayout();
+
+    // Listen for screen size changes
+    window.addEventListener("resize", enforceMobileLayout);
+    return () => window.removeEventListener("resize", enforceMobileLayout);
+  }, []);
+
   const toggleTheme = () => setTheme(isDark ? "light" : "dark");
   const toggleCalculator = () => setIsCalcOpen(!isCalcOpen);
 
