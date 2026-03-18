@@ -14,3 +14,28 @@
 .animate-fadeIn {
   animation: fadeIn 1s ease-in-out;
 }
+
+/* --- MOBILE PRINT FALLBACK STYLES --- */
+@media print {
+  /* 1. Hide the entire application UI */
+  .no-print, .nb-root {
+    display: none !important;
+  }
+  
+  /* 2. Un-hide and expand the hidden print containers */
+  .print-only {
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  /* 3. Force white background to prevent dark mode bleeding into print */
+  body, html {
+    background-color: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}

@@ -286,13 +286,9 @@ const Receipt = ({ theme }) => {
   const inputClass = `w-full p-1.5 rounded border text-sm ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"} focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed`;
   const labelClass = `block text-[10px] font-bold uppercase mb-0.5 ${isDark ? "text-gray-400" : "text-gray-600"}`;
   const tableHeaderClass = `px-4 py-2 text-left text-xs font-semibold ${isDark ? "text-gray-300 bg-gray-700" : "text-gray-600 bg-gray-100"}`;
-  
-  // Added text-gray-200 for dark mode readability and text-gray-800 for light mode
   const tableRowClass = `border-b ${isDark ? "border-gray-700 hover:bg-gray-700/50 text-gray-200" : "border-gray-100 hover:bg-gray-50 text-gray-800"} transition-colors`;
 
   // ─── RECEIPT INNER BODY ───────────────────────────────────────────────────
-  // Single source of truth for receipt content.
-  // Rendered in: (1) screen preview, (2) hidden print div.
   const renderReceiptBody = () => (
     <div style={{
       position: 'relative', width: '100%', height: '100%',
@@ -439,7 +435,6 @@ const Receipt = ({ theme }) => {
               <span style={{ fontWeight: 500 }}>For</span>{' '}
               <span style={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: '11px' }}>VALUE MOTOR AGENCY PVT LTD</span>
             </div>
-            {/* Fixed 12mm gap for physical signature */}
             <div style={{ height: '12mm', width: '100%' }} aria-hidden="true" />
             <div style={{ fontSize: '11px', borderTop: '2px solid black', display: 'inline-block', padding: '2px 28px 0', fontWeight: 'bold', letterSpacing: '0.04em' }}>
               Authorised Signatory
@@ -462,22 +457,13 @@ const Receipt = ({ theme }) => {
   );
 
   // ─── PRINT LAYOUT ─────────────────────────────────────────────────────────
-  //
-  //  Physical A4: 210mm × 297mm, margin: 0
-  //  Page padding: 5mm on all four sides → content area: 200mm wide
-  //
-  //  Customer copy outer border: 200mm × 120mm  (5mm from every page edge)
-  //  Office copy:  extra 15mm left indent for punch-hole filing
-  //                border width: 185mm (200 - 15), height: 120mm
-  //                Left edge is 5 + 15 = 20mm from paper edge
-  //
   const renderPrintLayout = () => (
     <div
       ref={componentRef}
       style={{
         width: '210mm',
         minHeight: '297mm',
-        padding: '5mm',           // ← 5mm from every physical edge
+        padding: '5mm',
         boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
@@ -538,253 +524,248 @@ const Receipt = ({ theme }) => {
 
   return (
     <div className="container mx-auto p-2 md:p-4 max-w-7xl">
-      <DaySummary isOpen={showSummary} onClose={() => setShowSummary(false)} theme={theme} />
+      <div className="no-print">
+        <DaySummary isOpen={showSummary} onClose={() => setShowSummary(false)} theme={theme} />
 
-      {/* Top bar */}
-      <div className={`mb-8 flex flex-col sm:flex-row justify-between items-center p-4 rounded-2xl shadow-lg gap-4 ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-gradient-to-r from-blue-100 to-indigo-100 border border-blue-200'}`}>
-        <div className="w-full sm:w-[400px] relative z-30">
-          <input 
-            type="text" value={searchTerm} onChange={handleSearchInput}
-            placeholder="Search by File No, Name..." 
-            className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm shadow-inner focus:ring-2 outline-none transition-all border backdrop-blur-md ${isDark ? 'bg-white/10 border-white/20 text-white focus:ring-white/50 placeholder-gray-300' : 'bg-white/50 border-white/60 text-gray-800 focus:ring-blue-500 placeholder-gray-600'}`}
-          />
-          <Search className={`absolute left-3 top-3 ${isDark ? 'text-gray-300' : 'text-gray-500'}`} size={18} />
-          {searchResults.length > 0 && (
-            <div className={`absolute top-12 left-0 right-0 border shadow-[0_8px_32px_0_rgba(31,38,135,0.15)] rounded-2xl max-h-80 overflow-y-auto z-50 backdrop-blur-xl ${isDark ? 'bg-gray-900/95 border-white/10' : 'bg-white/95 border-white/60'}`}>
-              {searchResults.map(r => (
-                <div key={r.receipt_no} onClick={() => selectSearchResult(r)} className={`p-4 border-b cursor-pointer flex justify-between items-center transition-colors ${isDark ? 'border-white/5 hover:bg-white/10' : 'border-gray-200/50 hover:bg-white/50'}`}>
-                  <div>
-                    <div className={`font-bold text-sm ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>Receipt #{r.receipt_no}</div>
-                    <div className={`text-sm font-semibold mt-0.5 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{r.customer_name}</div>
-                    <div className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>File: {r.file_no || '--'} • Mob: {r.mobile || '--'}</div>
+        {/* Top bar */}
+        <div className={`mb-8 flex flex-col sm:flex-row justify-between items-center p-4 rounded-2xl shadow-lg gap-4 ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-gradient-to-r from-blue-100 to-indigo-100 border border-blue-200'}`}>
+          <div className="w-full sm:w-[400px] relative z-30">
+            <input 
+              type="text" value={searchTerm} onChange={handleSearchInput}
+              placeholder="Search by File No, Name..." 
+              className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm shadow-inner focus:ring-2 outline-none transition-all border backdrop-blur-md ${isDark ? 'bg-white/10 border-white/20 text-white focus:ring-white/50 placeholder-gray-300' : 'bg-white/50 border-white/60 text-gray-800 focus:ring-blue-500 placeholder-gray-600'}`}
+            />
+            <Search className={`absolute left-3 top-3 ${isDark ? 'text-gray-300' : 'text-gray-500'}`} size={18} />
+            {searchResults.length > 0 && (
+              <div className={`absolute top-12 left-0 right-0 border shadow-[0_8px_32px_0_rgba(31,38,135,0.15)] rounded-2xl max-h-80 overflow-y-auto z-50 backdrop-blur-xl ${isDark ? 'bg-gray-900/95 border-white/10' : 'bg-white/95 border-white/60'}`}>
+                {searchResults.map(r => (
+                  <div key={r.receipt_no} onClick={() => selectSearchResult(r)} className={`p-4 border-b cursor-pointer flex justify-between items-center transition-colors ${isDark ? 'border-white/5 hover:bg-white/10' : 'border-gray-200/50 hover:bg-white/50'}`}>
+                    <div>
+                      <div className={`font-bold text-sm ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>Receipt #{r.receipt_no}</div>
+                      <div className={`text-sm font-semibold mt-0.5 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{r.customer_name}</div>
+                      <div className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>File: {r.file_no || '--'} • Mob: {r.mobile || '--'}</div>
+                    </div>
+                    <div className={`font-bold text-lg ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>₹{r.amount}</div>
                   </div>
-                  <div className={`font-bold text-lg ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>₹{r.amount}</div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setShowSummary(true)}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold transition-all border shadow-sm whitespace-nowrap w-full sm:w-auto justify-center backdrop-blur-md ${isDark ? 'bg-white/10 hover:bg-white/20 border-white/20 text-white' : 'bg-white/40 hover:bg-white/60 border-white/50 text-gray-800'}`}
+          >
+            <Calendar size={18} /> Daily Summary
+          </button>
         </div>
-        <button
-          onClick={() => setShowSummary(true)}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold transition-all border shadow-sm whitespace-nowrap w-full sm:w-auto justify-center backdrop-blur-md ${isDark ? 'bg-white/10 hover:bg-white/20 border-white/20 text-white' : 'bg-white/40 hover:bg-white/60 border-white/50 text-gray-800'}`}
-        >
-          <Calendar size={18} /> Daily Summary
-        </button>
-      </div>
 
-      <div className="flex flex-col lg:flex-row gap-4 mb-8">
+        <div className="flex flex-col lg:flex-row gap-4 mb-8">
 
-        {/* ── LEFT: FORM ── */}
-        <div className={`w-full lg:w-[380px] lg:flex-shrink-0 p-4 rounded-xl shadow-lg h-fit ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"} border`}>
-          {serverError && (
-            <div className="mb-4 bg-red-100 border-l-4 border-red-500 text-red-700 p-2 rounded shadow-md animate-pulse">
-              <div className="flex items-center gap-2"><WifiOff size={16} /><p className="font-bold text-xs">System Offline</p></div>
-            </div>
-          )}
-          <div className="flex items-start justify-between mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
-            <div>
-              <h2 className={`text-base font-bold ${isDark ? "text-white" : "text-gray-800"}`}>{isEditing ? "Edit Receipt" : "New Receipt"}</h2>
-              <div className="text-sm font-bold text-red-600 mt-0.5">#{formData.receiptNo}</div>
-            </div>
-            <div className="flex gap-2">
-              {isEditing && (
-                <button onClick={handleCancelReceipt} className="bg-red-100 text-red-600 hover:bg-red-200 p-1.5 rounded transition" title="Cancel Receipt">
-                  <Ban size={16} />
+          {/* ── LEFT: FORM ── */}
+          <div className={`w-full lg:w-[380px] lg:flex-shrink-0 p-4 rounded-xl shadow-lg h-fit ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"} border`}>
+            {serverError && (
+              <div className="mb-4 bg-red-100 border-l-4 border-red-500 text-red-700 p-2 rounded shadow-md animate-pulse">
+                <div className="flex items-center gap-2"><WifiOff size={16} /><p className="font-bold text-xs">System Offline</p></div>
+              </div>
+            )}
+            <div className="flex items-start justify-between mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+              <div>
+                <h2 className={`text-base font-bold ${isDark ? "text-white" : "text-gray-800"}`}>{isEditing ? "Edit Receipt" : "New Receipt"}</h2>
+                <div className="text-sm font-bold text-red-600 mt-0.5">#{formData.receiptNo}</div>
+              </div>
+              <div className="flex gap-2">
+                {isEditing && (
+                  <button onClick={handleCancelReceipt} className="bg-red-100 text-red-600 hover:bg-red-200 p-1.5 rounded transition" title="Cancel Receipt">
+                    <Ban size={16} />
+                  </button>
+                )}
+                <button onClick={resetForm} className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                  <RefreshCw size={14} /> Clear & Reset
                 </button>
-              )}
-              <button onClick={resetForm} className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1">
-                <RefreshCw size={14} /> Clear & Reset
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <fieldset disabled={serverError} className="space-y-2">
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className={labelClass}>Date</label><input type="date" name="date" value={formData.date} onChange={handleChange} className={inputClass} /></div>
+                  <div>
+                    <label className={labelClass}>File No</label>
+                    <div className="flex shadow-sm rounded border overflow-hidden">
+                      <span className={`px-2 py-1.5 text-xs font-mono font-bold flex items-center justify-center select-none ${isDark ? 'bg-gray-600 text-gray-300' : 'bg-gray-100 text-gray-500'}`}>{currentFilePrefix}</span>
+                      <input name="fileNoSeq" value={formData.fileNoSeq} onChange={handleFileChange} autoComplete="off"
+                        className={`w-full p-1.5 text-sm font-mono tracking-wide font-bold text-blue-600 focus:outline-none ${isDark ? 'bg-gray-700 text-red-400' : 'bg-white'}`} placeholder="XXXX" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className={labelClass}>Amount (₹)</label><input type="number" name="amount" value={formData.amount} onChange={handleChange} autoComplete="off" className={inputClass} /></div>
+                  <div>
+                    <label className={labelClass}>By Way Of</label>
+                    <select name="paymentMode" value={formData.paymentMode} onChange={handleChange} className={inputClass}>
+                      <option>Cash</option><option>UPI</option><option>Cheque</option><option>Bank Transfer</option><option>Card</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div><label className={labelClass}>Customer Name</label><input name="customerName" value={formData.customerName} onChange={handleChange} autoComplete="off" className={inputClass} /></div>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className={labelClass}>On Account Of</label>
+                    <select name="paymentType" value={formData.paymentType} onChange={handleChange} className={inputClass}>
+                      <option>Booking</option><option>Down Payment</option><option>Balance Payment</option><option value="Other">Other (Custom)</option>
+                    </select>
+                    {formData.paymentType === 'Other' && (
+                      <input name="customPaymentType" value={formData.customPaymentType} onChange={handleChange} autoComplete="off" className={`mt-2 ${inputClass}`} placeholder="Enter custom account..." />
+                    )}
+                  </div>
+                  <div><label className={labelClass}>Model</label><input name="model" value={formData.model} onChange={handleChange} autoComplete="on" className={inputClass} /></div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className={labelClass}>Mobile Number</label><input name="mobile" value={formData.mobile} onChange={handleChange} autoComplete="off" className={inputClass} /></div>
+                  <div><label className={labelClass}>HP To</label><input name="hp" value={formData.hp} onChange={handleChange} autoComplete="on" className={inputClass} /></div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                  <div><label className={labelClass}>Cheque / Ref No</label><input name="chequeNo" value={formData.chequeNo} onChange={handleChange} autoComplete="off" className={inputClass} placeholder="Optional" /></div>
+                  <div><label className={labelClass}>Dated (Optional)</label><input type="date" name="dated" value={formData.dated} onChange={handleChange} className={inputClass} /></div>
+                </div>
+                
+                <div>
+                  <label className={labelClass}>Remarks</label>
+                  <input name="remarks" value={formData.remarks} onChange={handleChange} autoComplete="off" className={inputClass} placeholder="Any additional notes..." />
+                </div>
+
+              </fieldset>
+              
+              <button
+                onClick={handlePrint} disabled={serverError}
+                className={`w-full mt-3 font-bold py-2.5 px-4 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all ${
+                  serverError ? "bg-gray-400 cursor-not-allowed text-gray-200"
+                    : formData.status === 'CANCELLED' ? "bg-red-500 text-white cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700 text-white"
+                }`}
+              >
+                {serverError ? <WifiOff size={18} /> : <Printer size={18} />}
+                {serverError ? "Offline" : isEditing ? "Update & Print" : "Save & Print"}
               </button>
             </div>
           </div>
-          
-          <div className="space-y-2">
-            <fieldset disabled={serverError} className="space-y-2">
-              
-              <div className="grid grid-cols-2 gap-2">
-                <div><label className={labelClass}>Date</label><input type="date" name="date" value={formData.date} onChange={handleChange} className={inputClass} /></div>
-                <div>
-                  <label className={labelClass}>File No</label>
-                  <div className="flex shadow-sm rounded border overflow-hidden">
-                    <span className={`px-2 py-1.5 text-xs font-mono font-bold flex items-center justify-center select-none ${isDark ? 'bg-gray-600 text-gray-300' : 'bg-gray-100 text-gray-500'}`}>{currentFilePrefix}</span>
-                    <input name="fileNoSeq" value={formData.fileNoSeq} onChange={handleFileChange} autoComplete="off"
-                      className={`w-full p-1.5 text-sm font-mono tracking-wide font-bold text-blue-600 focus:outline-none ${isDark ? 'bg-gray-700 text-red-400' : 'bg-white'}`} placeholder="XXXX" />
+
+          {/* ── RIGHT: PREVIEW ── */}
+          <div
+            ref={previewPanelRef}
+            className={`hidden lg:flex w-full lg:flex-1 rounded-xl p-4 overflow-hidden items-start justify-center ${isDark ? "bg-gray-700/50" : "bg-gray-200"}`}
+          >
+            <div style={{
+              width: '100%',
+              height: `${PREVIEW_NATURAL_H * previewScale}px`,
+              position: 'relative',
+            }}>
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: '50%',
+                transform: `translateX(-${(A4_W_PX * previewScale) / 2}px) scale(${previewScale})`,
+                transformOrigin: 'top left',
+                width: `${A4_W_PX}px`,
+              }}>
+                {/* Paper background with 5mm side padding (matching print) */}
+                <div style={{
+                  backgroundColor: 'white',
+                  borderRadius: '6px',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.22)',
+                  padding: `0 ${PAGE_PAD_PX}px`,
+                  boxSizing: 'border-box',
+                  width: `${A4_W_PX}px`,
+                }}>
+                  {/* Copy label */}
+                  <div style={{
+                    textAlign: 'right', fontWeight: 'bold', fontSize: '10px',
+                    textTransform: 'uppercase', padding: '6px 4px 2px',
+                    letterSpacing: '0.15em', color: '#6b7280',
+                  }}>
+                    CUSTOMER COPY — PREVIEW
+                  </div>
+                  {/* Receipt border box: RECEIPT_W_PX × RECEIPT_H_PX */}
+                  <div style={{
+                    width: `${RECEIPT_W_PX}px`,
+                    height: `${RECEIPT_H_PX}px`,
+                    border: '3px solid black',
+                    borderRadius: '8px',
+                    boxSizing: 'border-box',
+                    backgroundColor: 'white',
+                    color: 'black',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    marginBottom: '6px',
+                  }}>
+                    {renderReceiptBody()}
                   </div>
                 </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div><label className={labelClass}>Amount (₹)</label><input type="number" name="amount" value={formData.amount} onChange={handleChange} autoComplete="off" className={inputClass} /></div>
-                <div>
-                  <label className={labelClass}>By Way Of</label>
-                  <select name="paymentMode" value={formData.paymentMode} onChange={handleChange} className={inputClass}>
-                    <option>Cash</option><option>UPI</option><option>Cheque</option><option>Bank Transfer</option><option>Card</option>
-                  </select>
-                </div>
-              </div>
-
-              <div><label className={labelClass}>Customer Name</label><input name="customerName" value={formData.customerName} onChange={handleChange} autoComplete="off" className={inputClass} /></div>
-              
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className={labelClass}>On Account Of</label>
-                  <select name="paymentType" value={formData.paymentType} onChange={handleChange} className={inputClass}>
-                    <option>Booking</option><option>Down Payment</option><option>Balance Payment</option><option value="Other">Other (Custom)</option>
-                  </select>
-                  {formData.paymentType === 'Other' && (
-                    <input name="customPaymentType" value={formData.customPaymentType} onChange={handleChange} autoComplete="off" className={`mt-2 ${inputClass}`} placeholder="Enter custom account..." />
-                  )}
-                </div>
-                <div><label className={labelClass}>Model</label><input name="model" value={formData.model} onChange={handleChange} autoComplete="on" className={inputClass} /></div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div><label className={labelClass}>Mobile Number</label><input name="mobile" value={formData.mobile} onChange={handleChange} autoComplete="off" className={inputClass} /></div>
-                <div><label className={labelClass}>HP To</label><input name="hp" value={formData.hp} onChange={handleChange} autoComplete="on" className={inputClass} /></div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                <div><label className={labelClass}>Cheque / Ref No</label><input name="chequeNo" value={formData.chequeNo} onChange={handleChange} autoComplete="off" className={inputClass} placeholder="Optional" /></div>
-                <div><label className={labelClass}>Dated (Optional)</label><input type="date" name="dated" value={formData.dated} onChange={handleChange} className={inputClass} /></div>
-              </div>
-              
-              <div>
-                <label className={labelClass}>Remarks</label>
-                <input name="remarks" value={formData.remarks} onChange={handleChange} autoComplete="off" className={inputClass} placeholder="Any additional notes..." />
-              </div>
-
-            </fieldset>
-            
-            <button
-              onClick={handlePrint} disabled={serverError}
-              className={`w-full mt-3 font-bold py-2.5 px-4 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all ${
-                serverError ? "bg-gray-400 cursor-not-allowed text-gray-200"
-                  : formData.status === 'CANCELLED' ? "bg-red-500 text-white cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700 text-white"
-              }`}
-            >
-              {serverError ? <WifiOff size={18} /> : <Printer size={18} />}
-              {serverError ? "Offline" : isEditing ? "Update & Print" : "Save & Print"}
-            </button>
-          </div>
-        </div>
-
-        {/* ── RIGHT: PREVIEW ── */}
-        {/*
-          previewPanelRef measures available width.
-          previewScale = panelWidth / A4_W_PX  (capped at 1.0).
-          The outer shim div takes height = PREVIEW_NATURAL_H × previewScale
-          so the panel doesn't collapse.
-          The inner absolute div is A4_W_PX wide, scaled from top-left.
-        */}
-        <div
-          ref={previewPanelRef}
-          className={`hidden lg:flex w-full lg:flex-1 rounded-xl p-4 overflow-hidden items-start justify-center ${isDark ? "bg-gray-700/50" : "bg-gray-200"}`}
-        >
-          <div style={{
-            width: '100%',
-            height: `${PREVIEW_NATURAL_H * previewScale}px`,
-            position: 'relative',
-          }}>
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: '50%',
-              // Centre the A4 sheet, then shift back half of its scaled width
-              transform: `translateX(-${(A4_W_PX * previewScale) / 2}px) scale(${previewScale})`,
-              transformOrigin: 'top left',
-              width: `${A4_W_PX}px`,
-            }}>
-              {/* Paper background with 5mm side padding (matching print) */}
-              <div style={{
-                backgroundColor: 'white',
-                borderRadius: '6px',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.22)',
-                padding: `0 ${PAGE_PAD_PX}px`,
-                boxSizing: 'border-box',
-                width: `${A4_W_PX}px`,
-              }}>
-                {/* Copy label */}
-                <div style={{
-                  textAlign: 'right', fontWeight: 'bold', fontSize: '10px',
-                  textTransform: 'uppercase', padding: '6px 4px 2px',
-                  letterSpacing: '0.15em', color: '#6b7280',
-                }}>
-                  CUSTOMER COPY — PREVIEW
-                </div>
-                {/* Receipt border box: RECEIPT_W_PX × RECEIPT_H_PX */}
-                <div style={{
-                  width: `${RECEIPT_W_PX}px`,
-                  height: `${RECEIPT_H_PX}px`,
-                  border: '3px solid black',
-                  borderRadius: '8px',
-                  boxSizing: 'border-box',
-                  backgroundColor: 'white',
-                  color: 'black',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  marginBottom: '6px',
-                }}>
-                  {renderReceiptBody()}
-                </div>
-              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Hidden print target — physically hidden instead of display: none so mobile rendering works */}
-      <div style={{ position: 'absolute', overflow: 'hidden', height: 0, width: 0, top: '-9999px', left: '-9999px' }}>
+        {/* Archives table */}
+        <div className={`rounded-xl shadow-lg p-6 ${isDark ? "bg-gray-800 border border-gray-700" : "bg-white border border-gray-100"}`}>
+          <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+            <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-800"}`}>Archives</h2>
+            <div className="flex gap-2 items-center flex-wrap">
+              <div className={`flex items-center gap-1 p-1 rounded border ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-300'}`}>
+                <input type="date" value={exportRange.from} onChange={(e) => setExportRange({ ...exportRange, from: e.target.value })} className={`bg-transparent text-xs ${isDark ? 'text-white outline-none' : 'outline-none'}`} />
+                <span className={`text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>TO</span>
+                <input type="date" value={exportRange.to} onChange={(e) => setExportRange({ ...exportRange, to: e.target.value })} className={`bg-transparent text-xs ${isDark ? 'text-white outline-none' : 'outline-none'}`} />
+                <button onClick={handleExport} className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-[10px] font-bold">EXPORT</button>
+              </div>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th className={tableHeaderClass}>No</th>
+                  <th className={tableHeaderClass}>Date</th>
+                  <th className={tableHeaderClass}>Customer</th>
+                  <th className={tableHeaderClass}>File No</th>
+                  <th className={tableHeaderClass}>Amount</th>
+                  <th className={tableHeaderClass}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map(item => (
+                  <tr
+                    key={item.receipt_no}
+                    className={`${tableRowClass} group cursor-pointer ${item.status === 'CANCELLED' ? (isDark ? 'bg-red-900/20 hover:bg-red-900/40' : 'bg-red-50 hover:bg-red-100') : ''}`}
+                    onClick={() => handleEdit(item)}
+                  >
+                    <td className="px-4 py-3">{item.receipt_no}</td>
+                    <td className="px-4 py-3">{formatDate(item.date)}</td>
+                    <td className="px-4 py-3 font-semibold">
+                      {item.customer_name}
+                      {item.status === 'CANCELLED' && <span className="ml-2 text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">CANCELLED</span>}
+                    </td>
+                    <td className="px-4 py-3">{item.file_no || '--'}</td>
+                    <td className={`px-4 py-3 font-bold ${item.status === 'CANCELLED' ? 'text-gray-400 line-through' : 'text-green-600'}`}>₹{item.amount}</td>
+                    <td className="px-4 py-3"><Edit3 size={14} className="opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity text-blue-500" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div> {/* End of no-print wrapper */}
+
+      {/* Hidden print target for desktop react-to-print OR mobile native print */}
+      <div className="print-only" style={{ position: 'absolute', overflow: 'hidden', height: 0, width: 0, top: '-9999px', left: '-9999px' }}>
         {renderPrintLayout()}
       </div>
 
-      {/* Archives table */}
-      <div className={`rounded-xl shadow-lg p-6 ${isDark ? "bg-gray-800 border border-gray-700" : "bg-white border border-gray-100"}`}>
-        <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-          <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-800"}`}>Archives</h2>
-          <div className="flex gap-2 items-center flex-wrap">
-            <div className={`flex items-center gap-1 p-1 rounded border ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-300'}`}>
-              <input type="date" value={exportRange.from} onChange={(e) => setExportRange({ ...exportRange, from: e.target.value })} className={`bg-transparent text-xs ${isDark ? 'text-white outline-none' : 'outline-none'}`} />
-              <span className={`text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>TO</span>
-              <input type="date" value={exportRange.to} onChange={(e) => setExportRange({ ...exportRange, to: e.target.value })} className={`bg-transparent text-xs ${isDark ? 'text-white outline-none' : 'outline-none'}`} />
-              <button onClick={handleExport} className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-[10px] font-bold">EXPORT</button>
-            </div>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr>
-                <th className={tableHeaderClass}>No</th>
-                <th className={tableHeaderClass}>Date</th>
-                <th className={tableHeaderClass}>Customer</th>
-                <th className={tableHeaderClass}>File No</th>
-                <th className={tableHeaderClass}>Amount</th>
-                <th className={tableHeaderClass}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map(item => (
-                <tr
-                  key={item.receipt_no}
-                  className={`${tableRowClass} group cursor-pointer ${item.status === 'CANCELLED' ? (isDark ? 'bg-red-900/20 hover:bg-red-900/40' : 'bg-red-50 hover:bg-red-100') : ''}`}
-                  onClick={() => handleEdit(item)}
-                >
-                  <td className="px-4 py-3">{item.receipt_no}</td>
-                  <td className="px-4 py-3">{formatDate(item.date)}</td>
-                  <td className="px-4 py-3 font-semibold">
-                    {item.customer_name}
-                    {item.status === 'CANCELLED' && <span className="ml-2 text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">CANCELLED</span>}
-                  </td>
-                  <td className="px-4 py-3">{item.file_no || '--'}</td>
-                  <td className={`px-4 py-3 font-bold ${item.status === 'CANCELLED' ? 'text-gray-400 line-through' : 'text-green-600'}`}>₹{item.amount}</td>
-                  <td className="px-4 py-3"><Edit3 size={14} className="opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity text-blue-500" /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 };
