@@ -542,7 +542,7 @@ const Receipt = ({ theme }) => {
 
       {/* Top bar */}
       <div className={`mb-8 flex flex-col sm:flex-row justify-between items-center p-4 rounded-2xl shadow-lg gap-4 ${isDark ? 'bg-gray-800 border border-gray-700' : 'bg-gradient-to-r from-blue-100 to-indigo-100 border border-blue-200'}`}>
-        <div className="w-full sm:w-[400px] relative z-50">
+        <div className="w-full sm:w-[400px] relative z-30">
           <input 
             type="text" value={searchTerm} onChange={handleSearchInput}
             placeholder="Search by File No, Name..." 
@@ -733,8 +733,8 @@ const Receipt = ({ theme }) => {
         </div>
       </div>
 
-      {/* Hidden print target — never visible on screen */}
-      <div style={{ display: 'none' }}>
+      {/* Hidden print target — physically hidden instead of display: none so mobile rendering works */}
+      <div style={{ position: 'absolute', overflow: 'hidden', height: 0, width: 0, top: '-9999px', left: '-9999px' }}>
         {renderPrintLayout()}
       </div>
 
