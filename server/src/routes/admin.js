@@ -7,7 +7,7 @@ const router = express.Router();
 // Increase limit for PDF uploads
 const upload = multer({ 
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
 
 // Helper: Get Financial Year YY
@@ -48,8 +48,7 @@ router.delete('/users/:id', async (req, res) => {
 // --- SETTINGS MANAGEMENT ---
 router.get('/settings', async (req, res) => {
   try {
-    //Only fetch editable UI settings. This prevents loading the massive Base64 PDF string 
-    // and prevents caching the sequence trackers which causes accidental overwrites.
+    //Only fetch editable UI settings.
     const result = await pool.query(
       "SELECT key, value FROM app_settings WHERE key IN ('file_prefix', 'portal_email', 'portal_password')"
     );
@@ -57,9 +56,9 @@ router.get('/settings', async (req, res) => {
     result.rows.forEach(row => { settings[row.key] = row.value; });
     
     // Set defaults if missing
-    if (!settings.file_prefix) settings.file_prefix = '';
-    if (!settings.portal_email) settings.portal_email = '';
-    if (!settings.portal_password) settings.portal_password = '';
+    if (settings.file_prefix === undefined) settings.file_prefix = '';
+    if (settings.portal_email === undefined) settings.portal_email = '';
+    if (settings.portal_password === undefined) settings.portal_password = '';
     
     res.json(settings);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -77,8 +76,8 @@ router.put('/settings', async (req, res) => {
     for (const [key, value] of Object.entries(settings)) {
       if (allowedKeys.includes(key)) {
         await client.query(
-          'INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2', 
-          [key, String(value)]
+          'INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', 
+          [key, String(value || '')]
         );
       }
     }
@@ -91,6 +90,35 @@ router.put('/settings', async (req, res) => {
 });
 
 // --- SEQUENCE RESET MANAGEMENT ---
+router.get('/sequences', async (req, res) => {
+    try {
+        let dp = 0, gatepass = 0, general = 0;
+
+        try {
+            const dpRes = await pool.query("SELECT last_value FROM dp_receipts_receipt_no_seq");
+            dp = parseInt(dpRes.rows[0]?.last_value || 0, 10);
+        } catch(e) { console.error("DP seq error", e.message); }
+
+        try {
+            const gpRes = await pool.query("SELECT last_value FROM gate_passes_pass_no_seq");
+            gatepass = parseInt(gpRes.rows[0]?.last_value || 0, 10);
+        } catch(e) { console.error("GP seq error", e.message); }
+
+        try {
+            const genRes = await pool.query("SELECT value FROM app_settings WHERE key = 'receipt_seq'");
+            general = parseInt(genRes.rows[0]?.value || 0, 10);
+        } catch(e) { console.error("Gen seq error", e.message); }
+
+        res.json({
+            dp: dp + 1,
+            gatepass: gatepass + 1,
+            general: general + 1
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.post('/reset-sequence', async (req, res) => {
     const { type, value } = req.body;
     const val = parseInt(value, 10);
@@ -104,9 +132,9 @@ router.post('/reset-sequence', async (req, res) => {
         } else if (type === 'gatepass') {
             await client.query(`ALTER SEQUENCE gate_passes_pass_no_seq RESTART WITH ${val}`);
         } else if (type === 'general') {
-            await client.query(`INSERT INTO app_settings (key, value) VALUES ('receipt_seq', $1) ON CONFLICT (key) DO UPDATE SET value = $1`, [String(val - 1)]);
+            await client.query(`INSERT INTO app_settings (key, value) VALUES ('receipt_seq', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [String(val - 1)]);
             const currentYY = getFinancialYearYY();
-            await client.query(`INSERT INTO app_settings (key, value) VALUES ('receipt_year', $1) ON CONFLICT (key) DO UPDATE SET value = $1`, [currentYY]);
+            await client.query(`INSERT INTO app_settings (key, value) VALUES ('receipt_year', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [currentYY]);
         } else {
             throw new Error("Unknown sequence type");
         }
@@ -132,32 +160,25 @@ router.delete('/receipts/bulk', async (req, res) => {
 router.post('/pricelist/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-  // Verify it's a PDF
   if (req.file.mimetype !== 'application/pdf') {
       return res.status(400).json({ error: "Please upload a valid PDF file." });
   }
 
-  const client = await pool.connect();
+  // Check size AFTER reading - warn if too large
+  const base64Pdf = req.file.buffer.toString('base64');
+  if (base64Pdf.length > 10 * 1024 * 1024) { // 10MB base64 limit
+    return res.status(413).json({ error: "PDF too large. Please compress it below 7MB." });
+  }
+
   try {
-    await client.query('BEGIN');
-
-    // Convert PDF buffer to Base64 String
-    const base64Pdf = req.file.buffer.toString('base64');
-
-    // Store in app_settings table
-    await client.query(
-        `INSERT INTO app_settings (key, value) VALUES ('price_list_pdf', $1) 
-         ON CONFLICT (key) DO UPDATE SET value = $1`,
-        [base64Pdf]
+    await pool.query(
+      `INSERT INTO app_settings (key, value) VALUES ('price_list_pdf', $1) 
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [base64Pdf]
     );
-
-    await client.query('COMMIT');
-    res.json({ success: true, message: `Price list PDF uploaded perfectly.` });
+    res.json({ success: true, message: `Price list PDF uploaded successfully.` });
   } catch (err) {
-    await client.query('ROLLBACK');
-    res.status(400).json({ error: err.message }); 
-  } finally {
-    client.release();
+    res.status(500).json({ error: err.message });
   }
 });
 

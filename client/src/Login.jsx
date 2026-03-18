@@ -34,7 +34,6 @@ const Login = ({ onLogin, initialError }) => {
       if (res.ok) {
         // Save credentials to Session Storage for Verify Module
         sessionStorage.setItem("userEmail", email);
-        sessionStorage.setItem("userPassword", password); 
         
         onLogin(data.role, data.email);
       } else {

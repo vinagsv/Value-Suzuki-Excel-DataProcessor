@@ -21,6 +21,12 @@ const Calculator = ({ theme }) => {
             // Safeguard: Do not evaluate if the string is just operators/brackets (e.g. "++" or "()")
             if (/^[+\-*/().]+$/.test(sanitized)) return;
             
+            // Additional safety: limit length to prevent DoS
+            if (sanitized.length > 100) return;
+            
+            // Prevent prototype access attempts
+            if (/__|prototype|constructor/i.test(sanitized)) return;
+            
             // Replace % with /100 so the JS evaluator can process it logically
             const evalStr = sanitized.replace(/%/g, '/100');
             

@@ -31,8 +31,13 @@ const getFileConfig = async () => {
 
 // 1. Get Next Numbers (Receipt No & File Prefix)
 router.get('/next', async (req, res) => {
+  const client = await pool.connect();
   try {
-    const config = await getFileConfig();
+    await client.query('BEGIN');
+    // Use advisory lock to prevent race conditions
+    await client.query('SELECT pg_advisory_xact_lock(12345)');
+
+    const config = await getFileConfig(); 
     const currentYY = getFinancialYearYY();
     
     // Receipt Number Logic: YYXXXX. Auto resets to 1 if Financial Year changes.
@@ -44,12 +49,16 @@ router.get('/next', async (req, res) => {
     const paddedReceiptSeq = String(nextReceiptSeq).padStart(4, '0');
     const nextReceiptNo = parseInt(`${currentYY}${paddedReceiptSeq}`, 10);
 
+    await client.query('COMMIT');
     res.json({ 
         nextReceiptNo, 
         prefix: config.prefix
     });
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -127,7 +136,7 @@ router.get('/months', async (req, res) => {
 // 5. Save Receipt
 router.post('/', async (req, res) => {
   let { 
-    receipt_no, date, customer_name, mobile, gst_no, file_no, hp_financier, 
+    receipt_no, date, customer_name, mobile, remarks, file_no, hp_financier, 
     model, amount, payment_type, payment_mode, payment_date, cheque_no, status 
   } = req.body;
   
@@ -140,9 +149,9 @@ router.post('/', async (req, res) => {
     // Insert Receipt
     await client.query(
       `INSERT INTO general_receipts 
-      (receipt_no, date, customer_name, mobile, gst_no, file_no, hp_financier, model, amount, payment_type, payment_mode, payment_date, cheque_no, status)
+      (receipt_no, date, customer_name, mobile, remarks, file_no, hp_financier, model, amount, payment_type, payment_mode, payment_date, cheque_no, status)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-      [receipt_no, date, customer_name, mobile, gst_no, file_no, hp_financier, model, amount, payment_type, payment_mode, payment_date, cheque_no, status]
+      [receipt_no, date, customer_name, mobile, remarks, file_no, hp_financier, model, amount, payment_type, payment_mode, payment_date, cheque_no, status]
     );
 
     try {
@@ -186,17 +195,17 @@ router.post('/', async (req, res) => {
 router.put('/:receipt_no', async (req, res) => {
   const { receipt_no } = req.params;
   const { 
-    date, customer_name, mobile, gst_no, file_no, hp_financier, 
+    date, customer_name, mobile, remarks, file_no, hp_financier, 
     model, amount, payment_type, payment_mode, payment_date, cheque_no, status 
   } = req.body;
 
   try {
     await pool.query(
       `UPDATE general_receipts SET 
-        date = $1, customer_name = $2, mobile = $3, gst_no = $4, file_no = $5, hp_financier = $6, 
+        date = $1, customer_name = $2, mobile = $3, remarks = $4, file_no = $5, hp_financier = $6, 
         model = $7, amount = $8, payment_type = $9, payment_mode = $10, payment_date = $11, cheque_no = $12, status = $13
       WHERE receipt_no = $14`,
-      [date, customer_name, mobile, gst_no, file_no, hp_financier, model, amount, payment_type, payment_mode, payment_date, cheque_no, status, receipt_no]
+      [date, customer_name, mobile, remarks, file_no, hp_financier, model, amount, payment_type, payment_mode, payment_date, cheque_no, status, receipt_no]
     );
     res.json({ success: true, message: "Receipt updated" });
   } catch (err) {

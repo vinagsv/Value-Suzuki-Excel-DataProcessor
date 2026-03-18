@@ -6,9 +6,9 @@ const router = express.Router();
 // Get Next DP Receipt Number
 router.get('/next', async (req, res) => {
   try {
-    const max = await pool.query("SELECT MAX(receipt_no) as max_no FROM dp_receipts");
-    const nextNo = (max.rows[0].max_no || 712) + 1;
-    res.json({ nextNo });
+    // Use the sequence's next value rather than MAX() to avoid sync issues
+    const result = await pool.query("SELECT last_value + 1 as next_no FROM dp_receipts_receipt_no_seq");
+    res.json({ nextNo: parseInt(result.rows[0].next_no) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

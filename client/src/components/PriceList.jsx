@@ -16,17 +16,24 @@ const PriceList = ({ theme, isActive }) => {
     const isAdmin = localStorage.getItem('userRole') === 'admin';
 
     useEffect(() => {
-        if (isActive && !pdfBlobUrl && !error) {
-            fetchPriceList();
+        let currentBlobUrl = null;
+        
+        if (isActive) {
+            fetchPriceList().then(url => { currentBlobUrl = url; });
         }
+        
         return () => {
-            if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
+            if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
         };
     }, [isActive]);
 
     const fetchPriceList = async () => {
         setLoading(true);
         setError(null);
+        
+        // Revoke previous URL before creating new one
+        if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
+        
         try {
             const res = await fetch(`${API_URL}/pricelist`, { credentials: 'include' });
             const data = await res.json();
@@ -44,12 +51,15 @@ const PriceList = ({ theme, isActive }) => {
                 const blob = new Blob([bytes], { type: 'application/pdf' });
                 const blobUrl = URL.createObjectURL(blob);
                 setPdfBlobUrl(blobUrl);
+                return blobUrl;
             } else {
                 setPdfBlobUrl(null);
+                return null;
             }
         } catch(e) { 
             console.error(e); 
             setError(e.message);
+            return null;
         }
         finally { setLoading(false); }
     };

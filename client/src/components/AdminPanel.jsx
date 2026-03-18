@@ -23,15 +23,13 @@ const AdminPanel = ({ theme }) => {
     const [delRange, setDelRange] = useState({ from: '', to: '' });
 
     // Sequence Controls State
-    const [seqValues, setSeqValues] = useState({
-        general: '',
-        dp: '',
-        gatepass: ''
-    });
+    const [currentSeqs, setCurrentSeqs] = useState({ general: '', dp: '', gatepass: '' });
+    const [seqValues, setSeqValues] = useState({ general: '', dp: '', gatepass: '' });
 
     useEffect(() => {
         if(activeTab === 'users') fetchUsers();
-        if(activeTab === 'settings') fetchSettings();
+        else if(activeTab === 'settings') fetchSettings();
+        else if(activeTab === 'sequences') fetchSequences();
     }, [activeTab]);
 
     const showToast = (msg, type = 'success') => {
@@ -40,66 +38,105 @@ const AdminPanel = ({ theme }) => {
 
     // --- USERS ---
     const fetchUsers = async () => {
-        const res = await fetch(`${API_URL}/admin/users`, { credentials: 'include' });
-        if(res.ok) setUsers(await res.json());
+        try {
+            const res = await fetch(`${API_URL}/admin/users`, { credentials: 'include' });
+            if(res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data)) setUsers(data);
+            } else {
+                const data = await res.json();
+                showToast(data.error || 'Failed to fetch users', 'error');
+            }
+        } catch (e) {
+            showToast('Network error fetching users', 'error');
+        }
     };
 
     const handleCreateUser = async (e) => {
         e.preventDefault();
-        const res = await fetch(`${API_URL}/admin/users`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(newUser),
-            credentials: 'include'
-        });
-        if(res.ok) {
-            showToast('User created');
-            setNewUser({ username: '', email: '', password: '', role: 'user' });
-            fetchUsers();
-        } else {
-            showToast('Failed to create user', 'error');
+        try {
+            const res = await fetch(`${API_URL}/admin/users`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(newUser),
+                credentials: 'include'
+            });
+            if(res.ok) {
+                showToast('User created');
+                setNewUser({ username: '', email: '', password: '', role: 'user' });
+                fetchUsers();
+            } else {
+                const data = await res.json();
+                showToast(data.error || 'Failed to create user', 'error');
+            }
+        } catch(e) {
+            showToast('Network connection error', 'error');
         }
     };
 
     const handleDeleteUser = async (id) => {
         if(!confirm("Delete user?")) return;
-        const res = await fetch(`${API_URL}/admin/users/${id}`, { 
-            method: 'DELETE',
-            credentials: 'include'
-        });
-        if(res.ok) {
-            showToast('User deleted');
-            fetchUsers();
-        } else {
-            showToast('Failed to delete', 'error');
+        try {
+            const res = await fetch(`${API_URL}/admin/users/${id}`, { 
+                method: 'DELETE',
+                credentials: 'include'
+            });
+            if(res.ok) {
+                showToast('User deleted');
+                fetchUsers();
+            } else {
+                const data = await res.json();
+                showToast(data.error || 'Failed to delete user', 'error');
+            }
+        } catch(e) {
+            showToast('Network connection error', 'error');
         }
     };
 
     // --- SETTINGS ---
     const fetchSettings = async () => {
-        const res = await fetch(`${API_URL}/admin/settings`, { credentials: 'include' });
-        if(res.ok) {
-            const data = await res.json();
-            setSettings(prev => ({ ...prev, ...data }));
+        try {
+            const res = await fetch(`${API_URL}/admin/settings`, { credentials: 'include' });
+            if(res.ok) {
+                const data = await res.json();
+                setSettings(prev => ({ ...prev, ...data }));
+            } else {
+                const data = await res.json();
+                showToast(data.error || 'Failed to load settings', 'error');
+            }
+        } catch (e) {
+            showToast('Network error loading settings', 'error');
         }
     };
 
     const saveSettings = async () => {
-        const res = await fetch(`${API_URL}/admin/settings`, {
-            method: 'PUT',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(settings),
-            credentials: 'include'
-        });
-        if(res.ok) {
-            showToast('Settings saved successfully');
-            setIsEditingSettings(false);
-        } else {
-            showToast('Failed to save settings', 'error');
+        try {
+            const res = await fetch(`${API_URL}/admin/settings`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(settings),
+                credentials: 'include'
+            });
+            const data = await res.json();
+            if(res.ok) {
+                showToast('Settings saved successfully');
+                setIsEditingSettings(false);
+            } else {
+                showToast(data.error || 'Failed to save settings', 'error');
+            }
+        } catch (err) {
+            showToast('Network Error saving settings', 'error');
         }
     };
 
     // --- DB SEQUENCE MANAGEMENT ---
+    const fetchSequences = async () => {
+        try {
+            const res = await fetch(`${API_URL}/admin/sequences`, { credentials: 'include' });
+            if(res.ok) setCurrentSeqs(await res.json());
+        } catch(e) { console.error("Failed to fetch sequences", e); }
+    };
+
     const handleResetDbSequence = async (type) => {
         const val = seqValues[type];
         if (!val || isNaN(val) || val < 1) {
@@ -119,6 +156,7 @@ const AdminPanel = ({ theme }) => {
             if(res.ok) {
                 showToast(data.message, 'success');
                 setSeqValues(prev => ({...prev, [type]: ''}));
+                fetchSequences(); // Refresh the visible sequences
             } else {
                 showToast(data.error, 'error');
             }
@@ -129,16 +167,28 @@ const AdminPanel = ({ theme }) => {
 
     // --- DATA ACTIONS ---
     const handleBulkDelete = async () => {
+        if (!delRange.from || !delRange.to) {
+            showToast('Please select both From and To dates.', 'error');
+            return;
+        }
+        if (delRange.from > delRange.to) {
+            showToast('From date must be before To date.', 'error');
+            return;
+        }
         if(!confirm(`Are you sure you want to delete ALL receipts from ${delRange.from} to ${delRange.to}? This cannot be undone.`)) return;
-        const res = await fetch(`${API_URL}/admin/receipts/bulk`, {
-            method: 'DELETE',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ fromDate: delRange.from, toDate: delRange.to }),
-            credentials: 'include'
-        });
-        const data = await res.json();
-        if(res.ok) showToast(data.message);
-        else showToast(data.error, 'error');
+        try {
+            const res = await fetch(`${API_URL}/admin/receipts/bulk`, {
+                method: 'DELETE',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ fromDate: delRange.from, toDate: delRange.to }),
+                credentials: 'include'
+            });
+            const data = await res.json();
+            if(res.ok) showToast(data.message);
+            else showToast(data.error, 'error');
+        } catch(e) {
+            showToast('Server connection error', 'error');
+        }
     };
 
     const tabClass = (id) => `px-6 py-3 font-bold rounded-t-lg transition-colors ${activeTab === id 
@@ -274,24 +324,33 @@ const AdminPanel = ({ theme }) => {
                 {/* SEQUENCES TAB */}
                 {activeTab === 'sequences' && (
                     <div className="grid md:grid-cols-3 gap-6">
-                        <div className={`p-6 rounded-xl border ${isDark ? 'bg-gray-700/30 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-                            <h3 className="font-bold text-blue-600 mb-2">General Receipts</h3>
-                            <p className="text-sm text-gray-500 mb-4">Overrides the counter for the YYXXXX format. Ex: enter 50 to make the next receipt 250050.</p>
-                            <input type="number" placeholder="Enter starting number" value={seqValues.general} onChange={e => setSeqValues({...seqValues, general: e.target.value})} className={`${inputClass} mb-4`} />
+                        <div className={`p-6 rounded-xl border flex flex-col justify-between ${isDark ? 'bg-gray-700/30 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+                            <div>
+                                <h3 className="font-bold text-blue-600 mb-2">General Receipts</h3>
+                                <p className="text-sm text-gray-500 mb-2">Overrides the counter for the YYXXXX format.</p>
+                                <p className="text-sm font-bold text-gray-400 mb-4">Current Next: <span className="text-blue-500 text-lg">{currentSeqs.general || '---'}</span></p>
+                                <input type="number" placeholder="Enter starting number" value={seqValues.general} onChange={e => setSeqValues({...seqValues, general: e.target.value})} className={`${inputClass} mb-4`} />
+                            </div>
                             <button onClick={() => handleResetDbSequence('general')} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded font-bold">Force Set Next</button>
                         </div>
 
-                        <div className={`p-6 rounded-xl border ${isDark ? 'bg-gray-700/30 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-                            <h3 className="font-bold text-blue-600 mb-2">DP Receipts</h3>
-                            <p className="text-sm text-gray-500 mb-4">Resets the PostgreSQL serial sequence. Only do this if starting fresh or fixing a gap.</p>
-                            <input type="number" placeholder="Enter starting number" value={seqValues.dp} onChange={e => setSeqValues({...seqValues, dp: e.target.value})} className={`${inputClass} mb-4`} />
+                        <div className={`p-6 rounded-xl border flex flex-col justify-between ${isDark ? 'bg-gray-700/30 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+                            <div>
+                                <h3 className="font-bold text-blue-600 mb-2">DP Receipts</h3>
+                                <p className="text-sm text-gray-500 mb-2">Resets the PostgreSQL serial sequence.</p>
+                                <p className="text-sm font-bold text-gray-400 mb-4">Current Next: <span className="text-blue-500 text-lg">{currentSeqs.dp || '---'}</span></p>
+                                <input type="number" placeholder="Enter starting number" value={seqValues.dp} onChange={e => setSeqValues({...seqValues, dp: e.target.value})} className={`${inputClass} mb-4`} />
+                            </div>
                             <button onClick={() => handleResetDbSequence('dp')} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded font-bold">Restart Sequence</button>
                         </div>
 
-                        <div className={`p-6 rounded-xl border ${isDark ? 'bg-gray-700/30 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-                            <h3 className="font-bold text-blue-600 mb-2">Gate Passes</h3>
-                            <p className="text-sm text-gray-500 mb-4">Resets the PostgreSQL serial sequence. Only do this if starting fresh or fixing a gap.</p>
-                            <input type="number" placeholder="Enter starting number" value={seqValues.gatepass} onChange={e => setSeqValues({...seqValues, gatepass: e.target.value})} className={`${inputClass} mb-4`} />
+                        <div className={`p-6 rounded-xl border flex flex-col justify-between ${isDark ? 'bg-gray-700/30 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+                            <div>
+                                <h3 className="font-bold text-blue-600 mb-2">Gate Passes</h3>
+                                <p className="text-sm text-gray-500 mb-2">Resets the PostgreSQL serial sequence.</p>
+                                <p className="text-sm font-bold text-gray-400 mb-4">Current Next: <span className="text-blue-500 text-lg">{currentSeqs.gatepass || '---'}</span></p>
+                                <input type="number" placeholder="Enter starting number" value={seqValues.gatepass} onChange={e => setSeqValues({...seqValues, gatepass: e.target.value})} className={`${inputClass} mb-4`} />
+                            </div>
                             <button onClick={() => handleResetDbSequence('gatepass')} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded font-bold">Restart Sequence</button>
                         </div>
                     </div>

@@ -6,9 +6,8 @@ const router = express.Router();
 // Get Next Pass Number
 router.get('/next', async (req, res) => {
   try {
-    const max = await pool.query("SELECT MAX(pass_no) as max_no FROM gate_passes");
-    const nextNo = (max.rows[0].max_no || 1000) + 1;
-    res.json({ nextNo });
+    const result = await pool.query("SELECT last_value + 1 as next_no FROM gate_passes_pass_no_seq");
+    res.json({ nextNo: parseInt(result.rows[0].next_no) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

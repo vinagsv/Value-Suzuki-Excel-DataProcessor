@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, createContext, useContext } from "react";
 import {
-  BrowserRouter as Router,
+  MemoryRouter as Router,
   Routes,
   Route,
   useParams,
