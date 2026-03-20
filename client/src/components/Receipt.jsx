@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { ToWords } from 'to-words';
-import { Printer, RefreshCw, Edit3, WifiOff, Calendar, Ban, Search } from 'lucide-react';
+import { Printer, RefreshCw, Edit3, WifiOff, Calendar, Ban, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import DaySummary from './DaySummary';
 import tailwindStyles from '../index.css?inline';
@@ -13,7 +13,13 @@ const toWords = new ToWords({
   converterOptions: { currency: false, ignoreDecimal: false, ignoreZeroCurrency: false, doNotAddOnly: true },
 });
 
-const isMobile = () => window.innerWidth < 1024;
+const toTitleCase = (str) => {
+  if (!str) return '';
+  return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+};
+
+// ─── Detect mobile (Android Chrome specifically) ───────────────────────────
+const isMobile = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 const Receipt = ({ theme }) => {
   const isDark = theme === 'dark';
@@ -50,6 +56,9 @@ const Receipt = ({ theme }) => {
   const [showSummary, setShowSummary] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 50;
 
   const A4_W_PX = 794;
   const PAGE_PAD_PX = Math.round((5 / 210) * A4_W_PX);
@@ -120,6 +129,22 @@ const Receipt = ({ theme }) => {
     fetchHistory();
     fetchAvailableMonths();
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'PageUp' || e.key === 'PageDown') {
+        if (history.length > 0) {
+          e.preventDefault();
+          let currentIndex = history.findIndex(item => String(item.receipt_no) === String(formData.receiptNo));
+          if (currentIndex === -1 && e.key === 'PageDown') currentIndex = -1;
+          let newIndex = e.key === 'PageUp' ? currentIndex - 1 : currentIndex + 1;
+          if (newIndex >= 0 && newIndex < history.length) handleEdit(history[newIndex]);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [formData.receiptNo, history]);
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -211,13 +236,15 @@ const Receipt = ({ theme }) => {
     const method = isEditing ? 'PUT' : 'POST';
     const finalPaymentType = dataToSave.paymentType === 'Other' ? dataToSave.customPaymentType : dataToSave.paymentType;
     const url = isEditing ? `${API_URL}/general-receipts/${dataToSave.receiptNo}` : `${API_URL}/general-receipts`;
+    const titleCasedName = toTitleCase(dataToSave.customerName);
+
     try {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           receipt_no: dataToSave.receiptNo, date: dataToSave.date,
-          customer_name: dataToSave.customerName, mobile: dataToSave.mobile,
+          customer_name: titleCasedName, mobile: dataToSave.mobile,
           file_no: finalFileNo, hp_financier: dataToSave.hp,
           model: dataToSave.model, amount: dataToSave.amount, payment_type: finalPaymentType,
           payment_mode: dataToSave.paymentMode, payment_date: dataToSave.dated || null,
@@ -227,6 +254,7 @@ const Receipt = ({ theme }) => {
       });
       if (!res.ok) throw new Error("Database Save Failed");
       if (window.toast) window.toast("Receipt Saved Successfully", "success");
+      setFormData(prev => ({ ...prev, customerName: titleCasedName }));
       fetchHistory(); fetchAvailableMonths();
       if (isEditing) { resetForm(); }
       else {
@@ -236,8 +264,255 @@ const Receipt = ({ theme }) => {
     } catch { if (window.toast) window.toast("Error saving receipt. Please check connection.", "error"); }
   };
 
-  // ─── DESKTOP PRINT (react-to-print) ──────────────────────────────────────
-  const handlePrintDesktop = useReactToPrint({
+  // ─── BUILD RECEIPT HTML STRING (used for mobile new-window print) ──────────
+  // This mirrors renderReceiptBody() exactly but as a pure HTML string so it
+  // works in a detached window without React — guaranteeing Chrome Android prints.
+  const buildReceiptHtmlString = (copy) => {
+    const fd = formData;
+    const hasValue = (val) => val && String(val).trim().length > 0;
+    const fullFileNo = currentFilePrefix + fd.fileNoSeq;
+    const amountWords = fd.amount && !isNaN(fd.amount)
+      ? toWords.convert(fd.amount).toUpperCase() + " ONLY"
+      : 'ZERO ONLY';
+    const finalPaymentType = fd.paymentType === 'Other' ? fd.customPaymentType : fd.paymentType;
+    const amountFormatted = Number(fd.amount).toLocaleString('en-IN');
+
+    const cancelledOverlay = fd.status === 'CANCELLED' ? `
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:50;pointer-events:none;">
+        <div style="border:4px solid rgba(239,68,68,0.3);color:rgba(239,68,68,0.3);font-size:64px;font-weight:900;transform:rotate(-45deg);padding:16px;border-radius:12px;letter-spacing:0.1em;user-select:none;line-height:1;">CANCELLED</div>
+      </div>` : '';
+
+    const fileNoHtml = hasValue(fullFileNo) ? `
+      <div style="font-size:13px;font-weight:bold;color:#1f2937;">File Number: <span style="margin-left:4px;">${fullFileNo}</span></div>` : '';
+
+    const modelHtml = hasValue(fd.model) ? `
+      <div style="display:flex;align-items:flex-end;">
+        <span style="font-weight:bold;margin-right:6px;white-space:nowrap;font-size:11px;">MODEL:</span>
+        <span style="border-bottom:1px dotted black;padding:0 8px;font-weight:bold;font-size:14px;text-transform:uppercase;min-width:120px;text-align:center;">${fd.model}</span>
+      </div>` : '';
+
+    const hpHtml = hasValue(fd.hp) ? `
+      <div style="display:flex;align-items:flex-end;">
+        <span style="font-weight:bold;margin-right:6px;white-space:nowrap;font-size:11px;">H.P. TO:</span>
+        <span style="border-bottom:1px dotted black;padding:0 8px;font-weight:bold;font-size:13px;text-transform:uppercase;min-width:150px;text-align:center;">${fd.hp}</span>
+      </div>` : '';
+
+    const mobileHtml = hasValue(fd.mobile) ? `
+      <div style="display:flex;align-items:flex-end;">
+        <span style="font-weight:bold;margin-right:6px;white-space:nowrap;font-size:11px;">MOBILE NO:</span>
+        <span style="border-bottom:1px dotted black;padding:0 8px;font-weight:bold;font-size:14px;min-width:150px;text-align:center;">${fd.mobile}</span>
+      </div>` : '';
+
+    const datedHtml = hasValue(fd.dated) ? `
+      <div style="font-weight:bold;font-size:12px;">DATED: <span style="margin-left:4px;">${formatDate(fd.dated)}</span></div>` : '';
+
+    const chequeHtml = hasValue(fd.chequeNo) ? `
+      <div style="font-style:italic;">Cheque/Ref No: <span style="font-weight:bold;">${fd.chequeNo}</span></div>` : '';
+
+    const remarksHtml = hasValue(fd.remarks) ? `
+      <div style="word-break:break-word;white-space:pre-wrap;line-height:1.2;">REMARKS: <span style="font-weight:bold;">${fd.remarks}</span></div>` : '';
+
+    const extraFinanceHtml = (hasValue(fd.chequeNo) || hasValue(fd.remarks)) ? `
+      <div style="display:flex;flex-direction:column;font-size:12px;font-weight:600;gap:2px;margin-top:4px;">
+        ${chequeHtml}${remarksHtml}
+      </div>` : '';
+
+    // Resolve logo path — use absolute origin so new window can load it
+    const logoSrc = `${window.location.origin}/suzuki-logo.png`;
+
+    return `
+      <div style="position:relative;width:100%;height:100%;box-sizing:border-box;padding:4mm;display:flex;flex-direction:column;overflow:hidden;font-family:sans-serif;color:black;">
+        ${cancelledOverlay}
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0.07;z-index:0;">
+          <img src="${logoSrc}" alt="" style="width:66%;" />
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px;position:relative;z-index:10;">
+          <div style="width:45%;">
+            <img src="${logoSrc}" alt="Suzuki" style="width:180px;max-width:100%;" />
+            <div style="font-weight:bold;margin-top:2px;font-size:12px;">GST NO: 29AACCV2521J1ZA</div>
+          </div>
+          <div style="width:55%;text-align:right;">
+            <h1 style="font-size:19px;font-weight:900;text-transform:uppercase;line-height:1.2;margin:0;">VALUE MOTOR AGENCY PVT LTD</h1>
+            <p style="font-size:9px;font-weight:bold;margin-top:2px;letter-spacing:0.04em;margin:2px 0 0;">#16/A, MILLERS ROAD, VASANTH NAGAR, BANGALORE - 52</p>
+            <p style="font-size:9px;font-weight:bold;letter-spacing:0.04em;margin:1px 0 0;">Mob: 9845906084 | Email: millers_road_suzuki@yahoo.com</p>
+          </div>
+        </div>
+        <div style="border-bottom:2px solid black;text-align:center;margin-bottom:3px;padding-bottom:1px;">
+          <span style="font-size:20px;font-weight:bold;text-transform:uppercase;letter-spacing:0.2em;">RECEIPT</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:13px;font-weight:bold;position:relative;z-index:10;">
+          <div>NO: <span style="color:#dc2626;font-size:18px;margin-left:8px;">${fd.receiptNo}</span></div>
+          <div style="display:flex;align-items:center;gap:20px;">
+            ${fileNoHtml}
+            <div>DATE: <span style="margin-left:8px;font-size:15px;">${formatDate(fd.date)}</span></div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;position:relative;z-index:10;margin-top:2px;">
+          <div style="display:flex;align-items:flex-end;">
+            <span style="font-weight:bold;margin-right:8px;white-space:nowrap;font-size:13px;">RECEIVED WITH THANKS FROM:</span>
+            <span style="border-bottom:1px dotted black;flex-grow:1;padding:0 8px;font-weight:900;font-size:18px;text-transform:uppercase;line-height:1.2;color:#1e3a8a;">${fd.customerName}</span>
+          </div>
+          <div style="display:flex;flex-direction:column;">
+            <span style="font-weight:bold;font-size:12px;margin-bottom:1px;letter-spacing:0.04em;">THE SUM OF RUPEES:</span>
+            <div style="width:100%;padding:0 8px;font-weight:bold;font-size:17px;font-style:italic;text-transform:uppercase;line-height:28px;min-height:28px;word-break:break-word;background-image:radial-gradient(circle at 1px 26px,black 1px,transparent 1px);background-size:4px 28px;background-repeat:repeat;">
+              ${amountWords}
+            </div>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;">
+            ${modelHtml}
+            <div style="display:flex;align-items:flex-end;">
+              <span style="font-weight:bold;margin-right:6px;white-space:nowrap;font-size:11px;">ON ACCOUNT OF:</span>
+              <span style="border-bottom:1px dotted black;padding:0 8px;font-weight:bold;font-size:14px;text-transform:uppercase;min-width:120px;text-align:center;">${finalPaymentType}</span>
+            </div>
+            <div style="display:flex;align-items:flex-end;">
+              <span style="font-weight:bold;margin-right:6px;white-space:nowrap;font-size:11px;">BY WAY OF:</span>
+              <span style="border-bottom:1px dotted black;padding:0 8px;font-weight:bold;font-size:14px;text-transform:uppercase;min-width:120px;text-align:center;">${fd.paymentMode}</span>
+            </div>
+          </div>
+          ${hpHtml}
+          ${mobileHtml}
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;position:relative;z-index:10;">
+            <div style="display:flex;flex-direction:column;gap:3px;flex:1;padding-right:16px;">
+              <div style="display:flex;align-items:center;gap:16px;">
+                <div style="border:2px solid black;padding:4px 14px;font-size:21px;font-weight:900;background-color:#f9fafb;white-space:nowrap;letter-spacing:0.05em;line-height:1;">
+                  ₹ ${amountFormatted}/-
+                </div>
+                ${datedHtml}
+              </div>
+              ${extraFinanceHtml}
+            </div>
+            <div style="text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;flex-shrink:0;">
+              <div style="font-size:11px;margin-bottom:2px;letter-spacing:0.04em;">
+                <span style="font-weight:500;">For</span>
+                <span style="font-weight:bold;text-transform:uppercase;font-size:11px;"> VALUE MOTOR AGENCY PVT LTD</span>
+              </div>
+              <div style="height:12mm;width:100%;"></div>
+              <div style="font-size:11px;border-top:2px solid black;display:inline-block;padding:2px 28px 0;font-weight:bold;letter-spacing:0.04em;">
+                Authorised Signatory
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:4px;padding-top:3px;border-top:1px solid #9ca3af;position:relative;z-index:10;">
+          <div style="font-size:9px;font-weight:900;color:#1f2937;text-transform:uppercase;line-height:1.3;letter-spacing:0.04em;">
+            WE BANK WITH STATE BANK OF INDIA | A/C NO: 32744599339 | IFSC: SBIN0021882 | BRANCH: VASANTHNAGAR
+          </div>
+          <div style="font-size:8px;font-weight:900;color:black;text-transform:uppercase;margin-top:1px;letter-spacing:0.06em;">
+            NOTE: CHEQUES SUBJECT TO REALISATION. PRICES PREVAILING AT THE TIME OF DELIVERY APPLICABLE. ANY CANCELLATION SUBJECT TO 10% DEDUCTION.
+          </div>
+        </div>
+      </div>`;
+  };
+
+  // ─── MOBILE PRINT: open new window, write full HTML, trigger print ─────────
+  const handleMobilePrint = async () => {
+    if (serverError) { if (window.toast) window.toast("System Offline: Cannot print.", "error"); return; }
+    if (!formData.amount || isNaN(formData.amount)) { if (window.toast) window.toast("Please enter a valid amount.", "error"); return; }
+
+    const receiptBody1 = buildReceiptHtmlString('customer');
+    const receiptBody2 = buildReceiptHtmlString('office');
+
+    const fullHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Receipt_${formData.receiptNo}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 210mm;
+      background: white;
+      font-family: sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .page-wrap {
+      width: 210mm;
+      min-height: 297mm;
+      padding: 5mm;
+      display: flex;
+      flex-direction: column;
+      gap: 12mm;
+      background: white;
+    }
+    .receipt-block { display: flex; flex-direction: column; }
+    .copy-label {
+      text-align: right;
+      font-weight: bold;
+      font-size: 10px;
+      text-transform: uppercase;
+      margin-bottom: 1mm;
+      letter-spacing: 0.15em;
+      color: #6b7280;
+      font-family: sans-serif;
+    }
+    .receipt-outer {
+      border: 3px solid black;
+      border-radius: 8px;
+      background: white;
+      color: black;
+      position: relative;
+      overflow: hidden;
+    }
+    .customer-copy { width: 200mm; height: 120mm; }
+    .office-copy   { width: 185mm; height: 120mm; margin-left: 15mm; }
+    @media print {
+      @page { size: A4 portrait; margin: 0mm !important; }
+      html, body { margin: 0 !important; padding: 0 !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-wrap">
+    <div class="receipt-block">
+      <div class="copy-label">CUSTOMER COPY</div>
+      <div class="receipt-outer customer-copy">${receiptBody1}</div>
+    </div>
+    <div class="receipt-block">
+      <div class="copy-label">OFFICE COPY</div>
+      <div class="receipt-outer office-copy">${receiptBody2}</div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    // Open new tab — Chrome Android prints reliably from a real tab
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      if (window.toast) window.toast("Pop-ups blocked. Please allow pop-ups for this site.", "error");
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(fullHtml);
+    printWindow.document.close();
+
+    // Wait for images to load before triggering print
+    printWindow.onload = () => {
+      // Small delay ensures Chrome Android renders fully before print dialog
+      setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+        // Save to DB after opening print dialog
+        saveToDb();
+      }, 600);
+    };
+
+    // Fallback: if onload doesn't fire (some Android browsers)
+    setTimeout(() => {
+      if (printWindow && !printWindow.closed) {
+        printWindow.focus();
+        printWindow.print();
+        saveToDb();
+      }
+    }, 2500);
+  };
+
+  // ─── DESKTOP PRINT (react-to-print, unchanged) ───────────────────────────
+  const triggerPrint = useReactToPrint({
     contentRef: componentRef,
     documentTitle: `Receipt_${formData.receiptNo}`,
     onBeforeGetContent: () => {
@@ -247,160 +522,12 @@ const Receipt = ({ theme }) => {
     onAfterPrint: () => saveToDb()
   });
 
-  // ─── MOBILE PRINT (new window) ────────────────────────────────────────────
-  const handleMobilePrint = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      if (window.toast) window.toast("Please allow popups to print.", "error");
-      return;
-    }
-
-    const fullFileNo = currentFilePrefix + formData.fileNoSeq;
-    const amtWords = formData.amount && !isNaN(formData.amount)
-      ? toWords.convert(formData.amount).toUpperCase() + " ONLY"
-      : 'ZERO ONLY';
-    const payType = formData.paymentType === 'Other' ? formData.customPaymentType : formData.paymentType;
-    const isCancelled = formData.status === 'CANCELLED';
-
-    const receiptBlock = (label, marginLeft) => `
-      <div class="page" style="margin-left:${marginLeft}">
-        <div class="copy-label">${label}</div>
-        <div class="receipt-box">
-          ${isCancelled ? `<div class="cancelled-stamp"><div class="cancelled-inner">CANCELLED</div></div>` : ''}
-          <div class="watermark"><img src="/suzuki-logo.png" alt=""/></div>
-          <div class="content">
-            <div class="hdr">
-              <div class="hdr-left">
-                <img src="/suzuki-logo.png" alt="Suzuki" style="width:150px;max-width:100%;"/>
-                <div class="gst">GST NO: 29AACCV2521J1ZA</div>
-              </div>
-              <div class="hdr-right">
-                <div class="co-name">VALUE MOTOR AGENCY PVT LTD</div>
-                <div class="co-addr">#16/A, MILLERS ROAD, VASANTH NAGAR, BANGALORE - 52</div>
-                <div class="co-addr">Mob: 9845906084 | Email: millers_road_suzuki@yahoo.com</div>
-              </div>
-            </div>
-            <div class="title-bar"><span>RECEIPT</span></div>
-            <div class="meta-row">
-              <div>NO:<span class="rno">${formData.receiptNo}</span></div>
-              <div class="meta-right">
-                ${fullFileNo.trim() ? `<span>File Number: <strong>${fullFileNo}</strong></span>` : ''}
-                <span>DATE: <strong>${formatDate(formData.date)}</strong></span>
-              </div>
-            </div>
-            <div class="fields">
-              <div class="field-row">
-                <span class="flabel">RECEIVED WITH THANKS FROM:</span>
-                <span class="fval name">${formData.customerName}</span>
-              </div>
-              <div>
-                <div class="flabel" style="font-size:11px;margin-bottom:1px;">THE SUM OF RUPEES:</div>
-                <div class="amt-words">${amtWords}</div>
-              </div>
-              <div class="flex-row">
-                ${formData.model ? `<div class="field-row f1"><span class="flabel">MODEL:</span><span class="fval">${formData.model}</span></div>` : ''}
-                <div class="field-row f1"><span class="flabel">ON ACCOUNT OF:</span><span class="fval">${payType}</span></div>
-                <div class="field-row f1"><span class="flabel">BY WAY OF:</span><span class="fval">${formData.paymentMode}</span></div>
-              </div>
-              ${formData.hp ? `<div class="field-row"><span class="flabel">H.P. TO:</span><span class="fval">${formData.hp}</span></div>` : ''}
-              ${formData.mobile ? `<div class="field-row"><span class="flabel">MOBILE NO:</span><span class="fval">${formData.mobile}</span></div>` : ''}
-            </div>
-            <div class="bottom">
-              <div class="amt-sig-row">
-                <div class="amt-left">
-                  <div class="flex-row" style="align-items:center;gap:12px;">
-                    <div class="amt-box">₹ ${Number(formData.amount).toLocaleString('en-IN')}/-</div>
-                    ${formData.dated ? `<span style="font-weight:bold;font-size:11px;">DATED: ${formatDate(formData.dated)}</span>` : ''}
-                  </div>
-                  ${formData.chequeNo ? `<div style="font-size:11px;font-style:italic;margin-top:3px;">Cheque/Ref No: <strong>${formData.chequeNo}</strong></div>` : ''}
-                  ${formData.remarks ? `<div style="font-size:11px;margin-top:2px;word-break:break-word;">REMARKS: <strong>${formData.remarks}</strong></div>` : ''}
-                </div>
-                <div class="sig">
-                  <div class="sig-for">For <strong>VALUE MOTOR AGENCY PVT LTD</strong></div>
-                  <div class="sig-line">Authorised Signatory</div>
-                </div>
-              </div>
-            </div>
-            <div class="footer">
-              <div class="f-bank">WE BANK WITH STATE BANK OF INDIA | A/C NO: 32744599339 | IFSC: SBIN0021882 | BRANCH: VASANTHNAGAR</div>
-              <div class="f-note">NOTE: CHEQUES SUBJECT TO REALISATION. PRICES PREVAILING AT THE TIME OF DELIVERY APPLICABLE. ANY CANCELLATION SUBJECT TO 10% DEDUCTION.</div>
-            </div>
-          </div>
-        </div>
-      </div>`;
-
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Receipt_${formData.receiptNo}</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:sans-serif;background:white;}
-    @page{size:A4 portrait;margin:5mm;}
-    .page{width:200mm;}
-    .copy-label{text-align:right;font-weight:bold;font-size:10px;text-transform:uppercase;padding:4px 0 2px;letter-spacing:.15em;color:#6b7280;}
-    .receipt-box{width:200mm;height:120mm;border:3px solid black;border-radius:8px;box-sizing:border-box;background:white;color:black;position:relative;overflow:hidden;padding:4mm;display:flex;flex-direction:column;}
-    .page+.page{margin-top:12mm;}
-    .watermark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:.07;z-index:0;}
-    .watermark img{width:66%;}
-    .cancelled-stamp{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:50;pointer-events:none;}
-    .cancelled-inner{border:4px solid rgba(239,68,68,.3);color:rgba(239,68,68,.3);font-size:48px;font-weight:900;transform:rotate(-45deg);padding:12px;border-radius:12px;letter-spacing:.1em;line-height:1;}
-    .content{position:relative;z-index:10;display:flex;flex-direction:column;height:100%;}
-    .hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px;}
-    .hdr-left{width:45%;}
-    .gst{font-weight:bold;margin-top:2px;font-size:11px;}
-    .hdr-right{width:55%;text-align:right;}
-    .co-name{font-size:16px;font-weight:900;text-transform:uppercase;line-height:1.2;}
-    .co-addr{font-size:8px;font-weight:bold;margin-top:2px;letter-spacing:.04em;}
-    .title-bar{border-bottom:2px solid black;text-align:center;margin-bottom:3px;padding-bottom:1px;}
-    .title-bar span{font-size:18px;font-weight:bold;text-transform:uppercase;letter-spacing:.2em;}
-    .meta-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:12px;font-weight:bold;}
-    .meta-right{display:flex;align-items:center;gap:16px;}
-    .rno{color:#dc2626;font-size:16px;margin-left:6px;}
-    .fields{display:flex;flex-direction:column;gap:3px;}
-    .field-row{display:flex;align-items:flex-end;}
-    .f1{flex:1;}
-    .flabel{font-weight:bold;margin-right:6px;white-space:nowrap;font-size:10px;}
-    .fval{border-bottom:1px dotted black;flex-grow:1;padding:0 6px;font-size:12px;text-transform:uppercase;}
-    .fval.name{font-weight:900;font-size:15px;color:#1e3a8a;line-height:1.2;}
-    .amt-words{font-weight:bold;font-size:14px;font-style:italic;text-transform:uppercase;word-break:break-word;padding:0 6px;}
-    .flex-row{display:flex;gap:10px;flex-wrap:wrap;}
-    .bottom{flex:1;display:flex;flex-direction:column;justify-content:center;}
-    .amt-sig-row{display:flex;align-items:flex-end;justify-content:space-between;}
-    .amt-left{display:flex;flex-direction:column;flex:1;padding-right:12px;}
-    .amt-box{border:2px solid black;padding:4px 12px;font-size:18px;font-weight:900;background:#f9fafb;white-space:nowrap;letter-spacing:.05em;line-height:1;display:inline-block;}
-    .sig{text-align:center;display:flex;flex-direction:column;align-items:center;flex-shrink:0;}
-    .sig-for{font-size:10px;margin-bottom:2px;}
-    .sig-line{border-top:2px solid black;padding:2px 20px 0;display:inline-block;font-size:10px;font-weight:bold;margin-top:10mm;}
-    .footer{margin-top:3px;padding-top:2px;border-top:1px solid #9ca3af;}
-    .f-bank{font-size:8px;font-weight:900;color:#1f2937;text-transform:uppercase;line-height:1.3;letter-spacing:.04em;}
-    .f-note{font-size:7px;font-weight:900;color:black;text-transform:uppercase;margin-top:1px;letter-spacing:.06em;}
-  </style>
-</head>
-<body>
-  ${receiptBlock('CUSTOMER COPY', '0')}
-  ${receiptBlock('OFFICE COPY', '15mm')}
-  <script>
-    window.onload=function(){setTimeout(function(){window.print();},500);};
-  </script>
-</body>
-</html>`;
-
-    printWindow.document.write(html);
-    printWindow.document.close();
-    saveToDb();
-  };
-
-  // ─── UNIFIED handlePrint ──────────────────────────────────────────────────
+  // ─── UNIFIED HANDLER: routes to mobile or desktop ─────────────────────────
   const handlePrint = () => {
-    if (serverError) { if (window.toast) window.toast("System Offline: Cannot print.", "error"); return; }
-    if (!formData.amount || isNaN(formData.amount)) { if (window.toast) window.toast("Please enter a valid amount.", "error"); return; }
     if (isMobile()) {
       handleMobilePrint();
     } else {
-      handlePrintDesktop();
+      triggerPrint();
     }
   };
 
@@ -421,12 +548,17 @@ const Receipt = ({ theme }) => {
       return dA !== dB ? dA - dB : parseInt(a.receipt_no) - parseInt(b.receipt_no);
     });
     const dataToExport = sortedData.map(item => {
-      const fileNo = item.file_no || '', customer = item.customer_name || '';
+      const customer = toTitleCase(item.customer_name || '');
+      const fileNo = item.file_no || '';
+      const rawReceiptNo = String(item.receipt_no);
+      const shortReceiptNo = rawReceiptNo.length >= 6 ? rawReceiptNo.slice(2) : rawReceiptNo;
       return {
-        "Date": formatDate(item.date), "Receipt No": item.receipt_no,
+        "Date": formatDate(item.date),
+        "Complete Reciept Number": rawReceiptNo,
+        "Receipt No": shortReceiptNo,
         "File Number-Customer Name": fileNo && customer ? `${fileNo}-${customer}` : `${fileNo}${customer}`,
         "Amount": item.amount, "Mode": item.payment_mode, "Type": item.payment_type,
-        "File No": item.file_no, "Customer Name": item.customer_name, "Mobile": item.mobile,
+        "File No": item.file_no, "Customer Name": customer, "Mobile": item.mobile,
         "Model": item.model, "HP To": item.hp_financier, "Status": item.status || 'ACTIVE',
         "Cheque No": item.cheque_no, "Dated": item.payment_date ? formatDate(item.payment_date) : '',
         "Remarks": item.remarks
@@ -443,7 +575,10 @@ const Receipt = ({ theme }) => {
   const tableHeaderClass = `px-4 py-2 text-left text-xs font-semibold ${isDark ? "text-gray-300 bg-gray-700" : "text-gray-600 bg-gray-100"}`;
   const tableRowClass = `border-b ${isDark ? "border-gray-700 hover:bg-gray-700/50 text-gray-200" : "border-gray-100 hover:bg-gray-50 text-gray-800"} transition-colors`;
 
-  // ─── RECEIPT INNER BODY ───────────────────────────────────────────────────
+  const totalPages = Math.ceil(history.length / ITEMS_PER_PAGE);
+  const paginatedHistory = history.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  // ─── RECEIPT INNER BODY (React version — used for desktop print + preview) ──
   const renderReceiptBody = () => (
     <div style={{
       position: 'relative', width: '100%', height: '100%',
@@ -580,7 +715,7 @@ const Receipt = ({ theme }) => {
     </div>
   );
 
-  // ─── PRINT LAYOUT ─────────────────────────────────────────────────────────
+  // ─── PRINT LAYOUT (desktop react-to-print target) ─────────────────────────
   const renderPrintLayout = () => (
     <div
       ref={componentRef}
@@ -776,7 +911,7 @@ const Receipt = ({ theme }) => {
                 </tr>
               </thead>
               <tbody>
-                {history.map(item => (
+                {paginatedHistory.map(item => (
                   <tr
                     key={item.receipt_no}
                     className={`${tableRowClass} group cursor-pointer ${item.status === 'CANCELLED' ? (isDark ? 'bg-red-900/20 hover:bg-red-900/40' : 'bg-red-50 hover:bg-red-100') : ''}`}
@@ -795,11 +930,35 @@ const Receipt = ({ theme }) => {
                 ))}
               </tbody>
             </table>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4 px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+                <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Showing <span className="font-medium">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span> to <span className="font-medium">{Math.min(currentPage * ITEMS_PER_PAGE, history.length)}</span> of <span className="font-medium">{history.length}</span> results
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium transition-colors ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100 dark:hover:bg-gray-700'} ${isDark ? 'text-gray-300 bg-gray-800 border border-gray-600' : 'text-gray-700 bg-white border border-gray-300'}`}
+                  >
+                    <ChevronLeft size={16} /> Previous
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium transition-colors ${currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100 dark:hover:bg-gray-700'} ${isDark ? 'text-gray-300 bg-gray-800 border border-gray-600' : 'text-gray-700 bg-white border border-gray-300'}`}
+                  >
+                    Next <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Hidden print target for desktop react-to-print */}
+      {/* Hidden print target — desktop only, react-to-print */}
       <div className="print-only" style={{ position: 'absolute', overflow: 'hidden', height: 0, width: 0, top: '-9999px', left: '-9999px' }}>
         {renderPrintLayout()}
       </div>
