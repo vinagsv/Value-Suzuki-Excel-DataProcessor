@@ -7,8 +7,8 @@ import {
   Download,
   ChevronDown,
   ChevronUp,
-  Database,     
-  Loader2       
+  Database,
+  Loader2
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -19,7 +19,6 @@ const VahanConverter = ({ theme }) => {
   const [vahanFile, setVahanFile] = useState(null);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [outputName, setOutputName] = useState("VAHAN_UPDATED.xlsx");
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState(null);
   const [processedData, setProcessedData] = useState(null);
@@ -27,7 +26,6 @@ const VahanConverter = ({ theme }) => {
   const [vahanSheetName, setVahanSheetName] = useState("");
   const [form22SheetName, setForm22SheetName] = useState("");
 
-  // New states for Database Upload
   const [dbUploading, setDbUploading] = useState(false);
   const [dbStatus, setDbStatus] = useState(null);
 
@@ -38,14 +36,13 @@ const VahanConverter = ({ theme }) => {
     if (file) {
       if (type === "form22") {
         setForm22File(file);
-        setDbStatus(null); // Reset DB status when new file selected
+        setDbStatus(null);
       } else {
         setVahanFile(file);
       }
     }
   };
 
-  // --- NEW FUNCTION: Upload to Database for Search ---
   const uploadToDatabase = async () => {
     if (!form22File) return;
     
@@ -56,7 +53,6 @@ const VahanConverter = ({ theme }) => {
     formData.append('file', form22File);
 
     try {
-      // Note: This connects to your database just for the Gate Pass Search feature
       const response = await fetch(`${API_URL}/form22/upload`, {
         method: 'POST',
         body: formData,
@@ -114,8 +110,7 @@ const VahanConverter = ({ theme }) => {
       const vahanSheet = vahanWorkbook.Sheets[targetSheetName];
       const vahanData = XLSX.utils.sheet_to_json(vahanSheet, {
         header: 1,
-        raw: false,
-        dateNF: "yyyy-mm-dd",
+        defval: "", 
       });
 
       let filteredData = vahanData;
@@ -130,20 +125,43 @@ const VahanConverter = ({ theme }) => {
       let totalRows = 0;
       let updatedRows = 0;
 
-      for (let i = 1; i < filteredData.length; i++) {
-        const row = filteredData[i];
-        if (!row || !row[6]) continue;
+      if (filteredData.length > 0) {
+        const headerRow = filteredData[0];
+        let chassisColIndex = -1;
+        let nameColIndex = -1;
 
-        const chassis = row[6]
-          .toString()
-          .replace(/\s+/g, "")
-          .toUpperCase()
-          .trim();
-        if (chassis) {
-          totalRows++;
-          if (chassisToName[chassis]) {
-            row[12] = chassisToName[chassis];
-            updatedRows++;
+        for (let i = 0; i < headerRow.length; i++) {
+          const header = (headerRow[i] || "").toString().toLowerCase().trim();
+          if (header === "chasis no" || header === "chassis no" || header.includes("chasis")) {
+            chassisColIndex = i;
+          }
+          if (header === "name of customer" || header === "customer name" || header.includes("name of customer")) {
+            nameColIndex = i;
+          }
+        }
+
+        if (chassisColIndex === -1) chassisColIndex = 6;
+        if (nameColIndex === -1) nameColIndex = 12;
+
+        for (let i = 1; i < filteredData.length; i++) {
+          const row = filteredData[i];
+          if (!row || row.length === 0) continue;
+
+          const chassisVal = row[chassisColIndex];
+          if (!chassisVal) continue;
+
+          const chassis = chassisVal
+            .toString()
+            .replace(/\s+/g, "")
+            .toUpperCase()
+            .trim();
+            
+          if (chassis) {
+            totalRows++;
+            if (chassisToName[chassis]) {
+              row[nameColIndex] = chassisToName[chassis];
+              updatedRows++;
+            }
           }
         }
       }
@@ -218,13 +236,25 @@ const VahanConverter = ({ theme }) => {
     if (!start && !end) return { data, filtered: false };
 
     const headerRow = data[0];
+    if (!headerRow) return { data, filtered: false };
+
     let dateColIndex = -1;
 
     for (let i = 0; i < headerRow.length; i++) {
-      const header = (headerRow[i] || "").toString().toLowerCase();
-      if (header.includes("date") || header.includes("dt")) {
+      const header = (headerRow[i] || "").toString().toLowerCase().trim();
+      if (header === "receipt dt." || header === "receipt dt" || header.includes("receipt dt")) {
         dateColIndex = i;
         break;
+      }
+    }
+
+    if (dateColIndex === -1) {
+      for (let i = 0; i < headerRow.length; i++) {
+        const header = (headerRow[i] || "").toString().toLowerCase();
+        if (header.includes("date") || header.includes("dt")) {
+          dateColIndex = i;
+          break;
+        }
       }
     }
 
@@ -233,22 +263,41 @@ const VahanConverter = ({ theme }) => {
       return { data, filtered: false };
     }
 
-    const startTime = start ? new Date(start).getTime() : 0;
-    const endTime = end ? new Date(end).getTime() : Infinity;
+    const parseLocal = (dStr) => {
+      if (!dStr) return 0;
+      const [y, m, d] = dStr.split('-');
+      return new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10)).getTime();
+    };
+
+    const startTime = start ? parseLocal(start) : 0;
+    const endTime = end ? parseLocal(end) : Infinity;
 
     const filteredData = [headerRow];
 
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
-      if (!row || !row[dateColIndex]) {
+      if (!row) {
+        filteredData.push([]);
+        continue;
+      }
+
+      const isEmptyRow = row.every(cell => cell === "" || cell === null || cell === undefined);
+      if (isEmptyRow) {
         filteredData.push(row);
         continue;
       }
 
-      const dateStr = row[dateColIndex].toString();
-      const rowDate = parseDate(dateStr);
+      const dateVal = row[dateColIndex];
+      if (dateVal === "" || dateVal === null || dateVal === undefined) {
+        filteredData.push(row);
+        continue;
+      }
 
-      if (rowDate && rowDate >= startTime && rowDate <= endTime) {
+      const rowDate = parseDate(dateVal);
+
+      if (rowDate !== null && rowDate >= startTime && rowDate <= endTime) {
+        filteredData.push(row);
+      } else if (rowDate === null) {
         filteredData.push(row);
       }
     }
@@ -256,28 +305,37 @@ const VahanConverter = ({ theme }) => {
     return { data: filteredData, filtered: true };
   };
 
-  const parseDate = (dateStr) => {
-    const direct = new Date(dateStr);
-    if (!isNaN(direct.getTime())) {
-      return direct.getTime();
+  const parseDate = (val) => {
+    if (val === null || val === undefined || val === "") return null;
+
+    if (typeof val === 'number') {
+      const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
     }
-    const match = dateStr.match(/^(\d{2})[/-](\d{2})[/-](\d{4})/);
+
+    const str = String(val).trim();
+
+    let match = str.match(/^(\d{4})[/-](\d{2})[/-](\d{2})/);
     if (match) {
-      const [, day, month, year] = match;
-      const date = new Date(year, month - 1, day);
-      if (!isNaN(date.getTime())) {
-        return date.getTime();
-      }
+      return new Date(parseInt(match[1], 10), parseInt(match[2], 10) - 1, parseInt(match[3], 10)).getTime();
     }
+
+    match = str.match(/^(\d{2})[/-](\d{2})[/-](\d{4})/);
+    if (match) {
+      return new Date(parseInt(match[3], 10), parseInt(match[2], 10) - 1, parseInt(match[1], 10)).getTime();
+    }
+
+    const direct = new Date(str);
+    if (!isNaN(direct.getTime())) {
+      return new Date(direct.getFullYear(), direct.getMonth(), direct.getDate()).getTime();
+    }
+
     return null;
   };
 
   const downloadFile = () => {
     if (!processedData) return;
-    const fileName = outputName.endsWith(".xlsx")
-      ? outputName
-      : `${outputName}.xlsx`;
-    XLSX.writeFile(processedData, fileName);
+    XLSX.writeFile(processedData, "VAHAN_UPDATED.xlsx");
   };
 
   return (
@@ -293,10 +351,8 @@ const VahanConverter = ({ theme }) => {
 
       <div className={`rounded-2xl shadow-2xl p-8 ${isDark ? "bg-gray-800/50 backdrop-blur-sm" : "bg-white"}`}>
         
-        {/* File Uploads */}
         <div className="grid md:grid-cols-2 gap-6 mb-6">
           
-          {/* FORM 22 SECTION */}
           <div>
             <label className={`block text-sm font-semibold mb-3 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
               FORM22 File
@@ -318,7 +374,6 @@ const VahanConverter = ({ theme }) => {
               </div>
             </div>
 
-            {/* NEW: Upload to DB Button (For Search) */}
             <div className="flex flex-col gap-2">
               <button
                 onClick={uploadToDatabase}
@@ -340,7 +395,6 @@ const VahanConverter = ({ theme }) => {
                 )}
               </button>
 
-              {/* Status Message */}
               {dbStatus && (
                 <div className={`text-xs p-2 rounded text-center border ${
                   dbStatus.type === 'success' 
@@ -354,7 +408,6 @@ const VahanConverter = ({ theme }) => {
             </div>
           </div>
 
-          {/* VAHAN SECTION */}
           <div>
             <label className={`block text-sm font-semibold mb-3 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
               VAHAN File
@@ -378,7 +431,6 @@ const VahanConverter = ({ theme }) => {
           </div>
         </div>
 
-        {/* Advanced Settings Toggle */}
         <button
           onClick={() => setShowAdvanced(!showAdvanced)}
           className={`w-full mb-4 py-3 px-4 rounded-xl flex items-center justify-between transition-all ${
@@ -389,10 +441,8 @@ const VahanConverter = ({ theme }) => {
           {showAdvanced ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
         </button>
 
-        {/* Advanced Settings Content */}
         {showAdvanced && (
           <div className="mb-6 space-y-6">
-            {/* Sheet Names */}
             <div>
               <label className={`block text-sm font-semibold mb-3 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                 Sheet Names (Optional - leave empty for first sheet)
@@ -419,7 +469,6 @@ const VahanConverter = ({ theme }) => {
               </div>
             </div>
 
-            {/* Date Range */}
             <div>
               <label className={`block text-sm font-semibold mb-3 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                 Date Range (Optional - leave empty to process all)
@@ -439,23 +488,9 @@ const VahanConverter = ({ theme }) => {
                 />
               </div>
             </div>
-
-            {/* Output File Name */}
-            <div>
-              <label className={`block text-sm font-semibold mb-3 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                Output File Name
-              </label>
-              <input
-                type="text"
-                value={outputName}
-                onChange={(e) => setOutputName(e.target.value)}
-                className={`w-full px-4 py-3 rounded-xl transition-all ${isDark ? "bg-gray-700 text-white border-gray-600" : "bg-gray-50 text-gray-900 border-gray-300"} border focus:ring-2 focus:ring-blue-500 focus:outline-none`}
-              />
-            </div>
           </div>
         )}
 
-        {/* Action Buttons */}
         <div className="flex gap-4 mb-6">
           <button
             onClick={processFiles}
@@ -493,7 +528,6 @@ const VahanConverter = ({ theme }) => {
           </button>
         </div>
 
-        {/* Result Display */}
         {result && (
           <div className={`p-6 rounded-xl ${result.type === "success" ? (isDark ? "bg-green-900/30 border border-green-700" : "bg-green-50 border border-green-200") : (isDark ? "bg-red-900/30 border border-red-700" : "bg-red-50 border border-red-200")}`}>
             <div className="flex items-start gap-3">

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   Moon, Sun, LogOut, UserCircle, Shield, Calculator,
-  ChevronLeft, ChevronRight, Menu
+  ChevronLeft, ChevronRight, Menu, Info
 } from "lucide-react";
 
 const NavbarStyle = () => (
@@ -363,10 +363,10 @@ const pages = [
   { id: "gatepass",  name: "Gate Pass"},
   { id: "dp_receipt",name: "DP Receipt" },
   { id: "vahan",     name: "VAHAN"},
+  { id: "insurance", name: "Insurance"},
   { id: "dms",       name: "DMS Names"},
   { id: "tally",     name: "TALLY"},
-  { id: "attendance",name: "Attendance"},
-  { id: "info",      name: "Info"},
+  { id: "attendance",name: "Attendance"}
 ];
 
 const Navbar = ({
@@ -489,6 +489,13 @@ const Navbar = ({
 
             {isMenuOpen && (
               <div className="nb-dropdown">
+                <button
+                  className={`nb-dropdown-btn${activePage === "info" ? " active" : ""}`}
+                  onClick={() => { setActivePage("info"); setIsMenuOpen(false); }}
+                >
+                  <Info size={16} /> Info & Docs
+                </button>
+
                 {userRole === "admin" && (
                   <button
                     className={`nb-dropdown-btn${activePage === "admin" ? " active" : ""}`}

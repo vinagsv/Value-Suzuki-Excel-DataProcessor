@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import Navbar from "./components/Navbar";
 import Login from "./Login";
 import VahanConverter from "./components/VahanConverter";
+import InsuranceProcessor from "./components/InsuranceProcessor";
 import DMSNames from "./components/DMSNames";
 import InfoPage from "./components/InfoPage";
 import AttendanceApp from "./components/AttendanceApp";
@@ -190,6 +191,9 @@ function App() {
           </div>
           <div className={`absolute inset-0 overflow-y-auto ${activePage === "vahan" ? "block" : "hidden"}`}>
             <VahanConverter theme={theme} />
+          </div>
+          <div className={`absolute inset-0 overflow-y-auto ${activePage === "insurance" ? "block" : "hidden"}`}>
+            <InsuranceProcessor theme={theme} />
           </div>
           <div className={`absolute inset-0 overflow-y-auto ${activePage === "dms" ? "block" : "hidden"}`}>
             <DMSNames theme={theme} />
