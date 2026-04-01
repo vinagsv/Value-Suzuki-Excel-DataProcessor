@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx';
 
 const COMPANY_NAME = 'Value Motor Agency Pvt Ltd 2021-22 - (from 1-Apr-22)';
 const VOUCHER_TYPE = 'Counter Receipt';
-const PARENT_GROUP = 'Sundry Debtors-2025-2026';
+const PARENT_GROUP = 'Sundry Debtors-2026-2027';
 const FALLBACK_LEDGER = 'REF GST';
 
 const VALID_TYPES = ['Booking', 'Balance Payment', 'Down Payment'];
