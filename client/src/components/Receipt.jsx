@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { ToWords } from 'to-words';
-import { Printer, RefreshCw, Edit3, WifiOff, Calendar, Ban, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Printer, RefreshCw, Edit3, WifiOff, Calendar, Ban, Search, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import DaySummary from './DaySummary';
 import tailwindStyles from '../index.css?inline';
@@ -18,8 +18,23 @@ const toTitleCase = (str) => {
   return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 };
 
-// ─── Detect mobile (Android Chrome specifically) ───────────────────────────
 const isMobile = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+// ─── Extract the seq part (digits after last / or - or after leading letters) ──
+const extractSeqFromFileNo = (fileNo) => {
+  if (!fileNo) return '';
+  const clean = fileNo.replace(/\s/g, '');
+  if (clean.includes('/')) return clean.split('/').pop();
+  if (clean.includes('-')) return clean.split('-').pop();
+  return clean.replace(/^[A-Za-z]+/, '');
+};
+
+// ─── Extract prefix part ──────────────────────────────────────────────────────
+const extractPrefixFromFileNo = (fileNo, seq) => {
+  if (!fileNo || !seq) return '';
+  const clean = fileNo.replace(/\s/g, '');
+  return clean.slice(0, clean.length - seq.length);
+};
 
 const Receipt = ({ theme }) => {
   const isDark = theme === 'dark';
@@ -56,6 +71,10 @@ const Receipt = ({ theme }) => {
   const [showSummary, setShowSummary] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+
+  // ─── File number autofill state ───────────────────────────────────────────
+  const [fileNoOlderMatches, setFileNoOlderMatches] = useState([]); // all but the latest
+  const [showOlderEntries, setShowOlderEntries] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 50;
@@ -153,25 +172,99 @@ const Receipt = ({ theme }) => {
     setIsEditing(false);
     setSearchTerm('');
     setSearchResults([]);
+    setFileNoOlderMatches([]);
+    setShowOlderEntries(false);
     fetchNextReceiptNo();
   };
 
+  // ─── Apply a matched history record to the form ───────────────────────────
+  const applyFileNoMatch = (match, typedSeq) => {
+    const fileNo = (match.file_no || '').replace(/\s/g, '');
+    const cleanSeq = typedSeq.replace(/\s/g, '');
+    const detectedPrefix = extractPrefixFromFileNo(fileNo, extractSeqFromFileNo(fileNo));
+    setCurrentFilePrefix(detectedPrefix);
+    setFormData(prev => ({
+      ...prev,
+      fileNoSeq: extractSeqFromFileNo(fileNo), // use the canonical seq from the record
+      customerName: match.customer_name,
+      mobile: match.mobile || '',
+      model: match.model || '',
+      hp: match.hp_financier || ''
+    }));
+  };
+
+  // ─── Smart file number change handler ────────────────────────────────────
   const handleFileChange = (e) => {
     const rawInput = e.target.value;
     setFormData(prev => ({ ...prev, fileNoSeq: rawInput }));
-    const cleanCombined = (currentFilePrefix + rawInput).replace(/\s/g, '');
-    if (Array.isArray(history) && rawInput.length >= 3) {
-      const match = history.find(item => (item.file_no || '').replace(/\s/g, '') === cleanCombined);
-      if (match) {
-        setFormData(prev => ({
-          ...prev,
-          customerName: match.customer_name,
-          mobile: match.mobile || '',
-          model: match.model || '',
-          hp: match.hp_financier || ''
-        }));
+    setFileNoOlderMatches([]);
+    setShowOlderEntries(false);
+
+    if (!Array.isArray(history) || rawInput.trim().length < 3) return;
+
+    const cleanInput = rawInput.replace(/\s/g, '');
+
+    // ── 6-digit shorthand: first 2 = year YY, last 4 = seq ──────────────────
+    // e.g. "261234" → year=26, seq="1234" → look for VMA2026/1234
+    if (/^\d{6}$/.test(cleanInput)) {
+      const yearHint = cleanInput.substring(0, 2);   // "26"
+      const seqHint  = cleanInput.substring(2);       // "1234"
+
+      const yearMatch = history.find(item => {
+        const fileNo = (item.file_no || '').replace(/\s/g, '');
+        const seq = extractSeqFromFileNo(fileNo);
+        const prefix = extractPrefixFromFileNo(fileNo, seq);
+        // prefix contains the year: VMA2026/ → includes "2026" or "26"
+        return seq === seqHint && (prefix.includes('20' + yearHint) || prefix.includes(yearHint));
+      });
+
+      if (yearMatch) {
+        // Show the resolved seq in the field (drop the year hint prefix the user typed)
+        applyFileNoMatch(yearMatch, seqHint);
+        return;
       }
+      // If no year-specific match, fall through to normal seq search below
     }
+
+    // ── Normal seq search: collect ALL records matching the typed seq ────────
+    const allMatches = history.filter(item => {
+      const fileNo = (item.file_no || '').replace(/\s/g, '');
+      if (!fileNo) return false;
+      const seq = extractSeqFromFileNo(fileNo);
+      return seq === cleanInput;
+    });
+
+    if (allMatches.length === 0) return;
+
+    // Sort by prefix descending so latest year is first (VMA2026/ > VMA2025/)
+    const sorted = [...allMatches].sort((a, b) => {
+      const pa = (a.file_no || '').replace(/\s/g, '');
+      const pb = (b.file_no || '').replace(/\s/g, '');
+      return pb.localeCompare(pa);
+    });
+
+    const latest = sorted[0];
+    const older  = sorted.slice(1);
+
+    // Auto-fill with latest
+    applyFileNoMatch(latest, cleanInput);
+
+    // If there are older records with same seq, store them for the dropdown
+    if (older.length > 0) {
+      setFileNoOlderMatches(older);
+    }
+  };
+
+  // ─── Prefix editable directly ─────────────────────────────────────────────
+  const handlePrefixChange = (e) => {
+    setCurrentFilePrefix(e.target.value);
+  };
+
+  // ─── Pick an older entry from the dropdown ────────────────────────────────
+  const selectOlderEntry = (match) => {
+    applyFileNoMatch(match, formData.fileNoSeq);
+    setShowOlderEntries(false);
+    setFileNoOlderMatches([]);
   };
 
   const handleSearchInput = async (e) => {
@@ -196,11 +289,14 @@ const Receipt = ({ theme }) => {
       if (filePrefix && loadedSeq.startsWith(filePrefix)) {
         loadedPrefix = filePrefix; loadedSeq = loadedSeq.substring(filePrefix.length);
       } else {
-        const match = loadedSeq.match(/^(.*?)(\d+)$/);
-        if (match) { loadedPrefix = match[1]; loadedSeq = match[2]; } else { loadedPrefix = ''; }
+        const seq = extractSeqFromFileNo(loadedSeq);
+        loadedPrefix = extractPrefixFromFileNo(loadedSeq, seq);
+        loadedSeq = seq;
       }
     }
     setCurrentFilePrefix(loadedPrefix);
+    setFileNoOlderMatches([]);
+    setShowOlderEntries(false);
     setFormData({
       receiptNo: item.receipt_no,
       date: item.date ? item.date.substring(0, 10) : new Date().toISOString().split('T')[0],
@@ -264,9 +360,6 @@ const Receipt = ({ theme }) => {
     } catch { if (window.toast) window.toast("Error saving receipt. Please check connection.", "error"); }
   };
 
-  // ─── BUILD RECEIPT HTML STRING (used for mobile new-window print) ──────────
-  // This mirrors renderReceiptBody() exactly but as a pure HTML string so it
-  // works in a detached window without React — guaranteeing Chrome Android prints.
   const buildReceiptHtmlString = (copy) => {
     const fd = formData;
     const hasValue = (val) => val && String(val).trim().length > 0;
@@ -317,7 +410,6 @@ const Receipt = ({ theme }) => {
         ${chequeHtml}${remarksHtml}
       </div>` : '';
 
-    // Resolve logo path — use absolute origin so new window can load it
     const logoSrc = `${window.location.origin}/suzuki-logo.png`;
 
     return `
@@ -406,7 +498,6 @@ const Receipt = ({ theme }) => {
       </div>`;
   };
 
-  // ─── MOBILE PRINT: open new window, write full HTML, trigger print ─────────
   const handleMobilePrint = async () => {
     if (serverError) { if (window.toast) window.toast("System Offline: Cannot print.", "error"); return; }
     if (!formData.amount || isNaN(formData.amount)) { if (window.toast) window.toast("Please enter a valid amount.", "error"); return; }
@@ -479,7 +570,6 @@ const Receipt = ({ theme }) => {
 </body>
 </html>`;
 
-    // Open new tab — Chrome Android prints reliably from a real tab
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       if (window.toast) window.toast("Pop-ups blocked. Please allow pop-ups for this site.", "error");
@@ -490,18 +580,14 @@ const Receipt = ({ theme }) => {
     printWindow.document.write(fullHtml);
     printWindow.document.close();
 
-    // Wait for images to load before triggering print
     printWindow.onload = () => {
-      // Small delay ensures Chrome Android renders fully before print dialog
       setTimeout(() => {
         printWindow.focus();
         printWindow.print();
-        // Save to DB after opening print dialog
         saveToDb();
       }, 600);
     };
 
-    // Fallback: if onload doesn't fire (some Android browsers)
     setTimeout(() => {
       if (printWindow && !printWindow.closed) {
         printWindow.focus();
@@ -511,7 +597,6 @@ const Receipt = ({ theme }) => {
     }, 2500);
   };
 
-  // ─── DESKTOP PRINT (react-to-print, unchanged) ───────────────────────────
   const triggerPrint = useReactToPrint({
     contentRef: componentRef,
     documentTitle: `Receipt_${formData.receiptNo}`,
@@ -522,7 +607,6 @@ const Receipt = ({ theme }) => {
     onAfterPrint: () => saveToDb()
   });
 
-  // ─── UNIFIED HANDLER: routes to mobile or desktop ─────────────────────────
   const handlePrint = () => {
     if (isMobile()) {
       handleMobilePrint();
@@ -578,7 +662,6 @@ const Receipt = ({ theme }) => {
   const totalPages = Math.ceil(history.length / ITEMS_PER_PAGE);
   const paginatedHistory = history.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
-  // ─── RECEIPT INNER BODY (React version — used for desktop print + preview) ──
   const renderReceiptBody = () => (
     <div style={{
       position: 'relative', width: '100%', height: '100%',
@@ -715,7 +798,6 @@ const Receipt = ({ theme }) => {
     </div>
   );
 
-  // ─── PRINT LAYOUT (desktop react-to-print target) ─────────────────────────
   const renderPrintLayout = () => (
     <div
       ref={componentRef}
@@ -806,15 +888,75 @@ const Receipt = ({ theme }) => {
               <fieldset disabled={serverError} className="space-y-2">
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className={labelClass}>Date</label><input type="date" name="date" value={formData.date} onChange={handleChange} className={inputClass} /></div>
+
+                  {/* ── File No field with editable prefix + smart seq input ── */}
                   <div>
-                    <label className={labelClass}>File No</label>
-                    <div className="flex shadow-sm rounded border overflow-hidden">
-                      <span className={`px-2 py-1.5 text-xs font-mono font-bold flex items-center justify-center select-none ${isDark ? 'bg-gray-600 text-gray-300' : 'bg-gray-100 text-gray-500'}`}>{currentFilePrefix}</span>
-                      <input name="fileNoSeq" value={formData.fileNoSeq} onChange={handleFileChange} autoComplete="off"
-                        className={`w-full p-1.5 text-sm font-mono tracking-wide font-bold text-blue-600 focus:outline-none ${isDark ? 'bg-gray-700 text-red-400' : 'bg-white'}`} placeholder="XXXX" />
+                    <label className={labelClass}>
+                      File No
+                      {/* Subtle hint for 6-digit shorthand */}
+                      <span className={`ml-1 font-normal normal-case ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>(or YYseq)</span>
+                    </label>
+                    <div className="relative">
+                      <div className="flex shadow-sm rounded border overflow-hidden">
+                        {/* Editable prefix */}
+                        <input
+                          value={currentFilePrefix}
+                          onChange={handlePrefixChange}
+                          className={`w-16 p-1.5 text-xs font-mono font-bold text-center border-r focus:outline-none focus:bg-yellow-50 dark:focus:bg-yellow-900/20 ${isDark ? 'bg-gray-600 text-gray-300 border-gray-500' : 'bg-gray-100 text-gray-600 border-gray-300'}`}
+                          placeholder="PFX"
+                          title="Prefix — edit if needed"
+                        />
+                        {/* Seq input */}
+                        <input
+                          name="fileNoSeq"
+                          value={formData.fileNoSeq}
+                          onChange={handleFileChange}
+                          autoComplete="off"
+                          className={`w-full p-1.5 text-sm font-mono tracking-wide font-bold text-blue-600 focus:outline-none ${isDark ? 'bg-gray-700 text-red-400' : 'bg-white'}`}
+                          placeholder="XXXX"
+                        />
+                        {/* "older entries" toggle — only shown when duplicates exist */}
+                        {fileNoOlderMatches.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowOlderEntries(v => !v)}
+                            title={`${fileNoOlderMatches.length} older record${fileNoOlderMatches.length > 1 ? 's' : ''} with same number`}
+                            className={`px-2 flex items-center border-l transition-colors ${
+                              showOlderEntries
+                                ? (isDark ? 'bg-blue-700 border-blue-600 text-white' : 'bg-blue-100 border-blue-300 text-blue-700')
+                                : (isDark ? 'bg-gray-600 border-gray-500 text-gray-400 hover:text-gray-200' : 'bg-gray-50 border-gray-300 text-gray-400 hover:text-gray-600')
+                            }`}
+                          >
+                            <ChevronDown size={13} className={`transition-transform ${showOlderEntries ? 'rotate-180' : ''}`} />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Older entries dropdown */}
+                      {showOlderEntries && fileNoOlderMatches.length > 0 && (
+                        <div className={`absolute top-full left-0 right-0 z-20 mt-1 border rounded-lg shadow-lg overflow-hidden ${isDark ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'}`}>
+                          <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider ${isDark ? 'bg-gray-700 text-gray-400' : 'bg-gray-50 text-gray-500'}`}>
+                            Older records — same file seq
+                          </div>
+                          {fileNoOlderMatches.map(match => (
+                            <div
+                              key={match.receipt_no}
+                              onClick={() => selectOlderEntry(match)}
+                              className={`px-3 py-2 cursor-pointer flex justify-between items-center text-sm border-t transition-colors ${isDark ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-100 hover:bg-blue-50'}`}
+                            >
+                              <div>
+                                <span className={`font-bold text-xs font-mono ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{match.file_no}</span>
+                                <span className={`ml-2 font-semibold text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{match.customer_name}</span>
+                              </div>
+                              <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{match.mobile || '—'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
+
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className={labelClass}>Amount (₹)</label><input type="number" name="amount" value={formData.amount} onChange={handleChange} autoComplete="off" className={inputClass} /></div>
                   <div>
@@ -958,7 +1100,7 @@ const Receipt = ({ theme }) => {
         </div>
       </div>
 
-      {/* Hidden print target — desktop only, react-to-print */}
+      {/* Hidden print target — desktop only */}
       <div className="print-only" style={{ position: 'absolute', overflow: 'hidden', height: 0, width: 0, top: '-9999px', left: '-9999px' }}>
         {renderPrintLayout()}
       </div>
