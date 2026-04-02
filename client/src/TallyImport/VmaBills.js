@@ -48,8 +48,8 @@ const CONFIG = {
 
     // Bill Format Configuration
     BILL_FORMAT: {
-        // Matches "VMA" followed by digits (e.g., VMA7443)
-        REGEX: /^VMA(\d+)$/i,
+       // Matches "VMA" optionally followed by a backslash, then digits (e.g., VMA7443 or VMA\260003)
+        REGEX: /^VMA\\?(\d+)$/i,
         PREFIX: "VMA"
     },
 
