@@ -77,6 +77,7 @@ const Receipt = ({ theme }) => {
   const [showOlderEntries, setShowOlderEntries] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
+  const [isPrinting, setIsPrinting] = useState(false);
   const ITEMS_PER_PAGE = 50;
 
   const A4_W_PX = 794;
@@ -205,25 +206,21 @@ const Receipt = ({ theme }) => {
     const cleanInput = rawInput.replace(/\s/g, '');
 
     // ── 6-digit shorthand: first 2 = year YY, last 4 = seq ──────────────────
-    // e.g. "261234" → year=26, seq="1234" → look for VMA2026/1234
     if (/^\d{6}$/.test(cleanInput)) {
-      const yearHint = cleanInput.substring(0, 2);   // "26"
-      const seqHint  = cleanInput.substring(2);       // "1234"
+      const yearHint = cleanInput.substring(0, 2);
+      const seqHint  = cleanInput.substring(2);
 
       const yearMatch = history.find(item => {
         const fileNo = (item.file_no || '').replace(/\s/g, '');
         const seq = extractSeqFromFileNo(fileNo);
         const prefix = extractPrefixFromFileNo(fileNo, seq);
-        // prefix contains the year: VMA2026/ → includes "2026" or "26"
         return seq === seqHint && (prefix.includes('20' + yearHint) || prefix.includes(yearHint));
       });
 
       if (yearMatch) {
-        // Show the resolved seq in the field (drop the year hint prefix the user typed)
         applyFileNoMatch(yearMatch, seqHint);
         return;
       }
-      // If no year-specific match, fall through to normal seq search below
     }
 
     // ── Normal seq search: collect ALL records matching the typed seq ────────
@@ -236,7 +233,7 @@ const Receipt = ({ theme }) => {
 
     if (allMatches.length === 0) return;
 
-    // Sort by prefix descending so latest year is first (VMA2026/ > VMA2025/)
+    // Sort by prefix descending so latest year is first
     const sorted = [...allMatches].sort((a, b) => {
       const pa = (a.file_no || '').replace(/\s/g, '');
       const pb = (b.file_no || '').replace(/\s/g, '');
@@ -246,10 +243,8 @@ const Receipt = ({ theme }) => {
     const latest = sorted[0];
     const older  = sorted.slice(1);
 
-    // Auto-fill with latest
     applyFileNoMatch(latest, cleanInput);
 
-    // If there are older records with same seq, store them for the dropdown
     if (older.length > 0) {
       setFileNoOlderMatches(older);
     }
@@ -326,7 +321,7 @@ const Receipt = ({ theme }) => {
   };
 
   const saveToDb = async (dataOverride = null) => {
-    if (serverError) { if (window.toast) window.toast("System Offline: Cannot save data.", "error"); return; }
+    if (serverError) { if (window.toast) window.toast("System Offline: Cannot save data.", "error"); return false; }
     const dataToSave = dataOverride || formData;
     const finalFileNo = currentFilePrefix + dataToSave.fileNoSeq.trim();
     const method = isEditing ? 'PUT' : 'POST';
@@ -357,7 +352,8 @@ const Receipt = ({ theme }) => {
         setFormData(prev => ({ ...initialForm, date: prev.date, receiptNo: prev.receiptNo, fileNoSeq: '' }));
         await fetchNextReceiptNo();
       }
-    } catch { if (window.toast) window.toast("Error saving receipt. Please check connection.", "error"); }
+      return true;
+    } catch { if (window.toast) window.toast("Error saving receipt. Please check connection.", "error"); return false; }
   };
 
   const buildReceiptHtmlString = (copy) => {
@@ -499,8 +495,11 @@ const Receipt = ({ theme }) => {
   };
 
   const handleMobilePrint = async () => {
-    if (serverError) { if (window.toast) window.toast("System Offline: Cannot print.", "error"); return; }
-    if (!formData.amount || isNaN(formData.amount)) { if (window.toast) window.toast("Please enter a valid amount.", "error"); return; }
+    if (serverError) { if (window.toast) window.toast("System Offline: Cannot print.", "error"); setIsPrinting(false); return; }
+    if (!formData.amount || isNaN(formData.amount)) { if (window.toast) window.toast("Please enter a valid amount.", "error"); setIsPrinting(false); return; }
+
+    const saved = await saveToDb();
+    if (!saved) { setIsPrinting(false); return; }
 
     const receiptBody1 = buildReceiptHtmlString('customer');
     const receiptBody2 = buildReceiptHtmlString('office');
@@ -573,6 +572,7 @@ const Receipt = ({ theme }) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       if (window.toast) window.toast("Pop-ups blocked. Please allow pop-ups for this site.", "error");
+      setIsPrinting(false);
       return;
     }
 
@@ -584,7 +584,7 @@ const Receipt = ({ theme }) => {
       setTimeout(() => {
         printWindow.focus();
         printWindow.print();
-        saveToDb();
+        setIsPrinting(false);
       }, 600);
     };
 
@@ -592,7 +592,7 @@ const Receipt = ({ theme }) => {
       if (printWindow && !printWindow.closed) {
         printWindow.focus();
         printWindow.print();
-        saveToDb();
+        setIsPrinting(false);
       }
     }, 2500);
   };
@@ -600,17 +600,20 @@ const Receipt = ({ theme }) => {
   const triggerPrint = useReactToPrint({
     contentRef: componentRef,
     documentTitle: `Receipt_${formData.receiptNo}`,
-    onBeforeGetContent: () => {
-      if (serverError) { if (window.toast) window.toast("System Offline: Cannot print.", "error"); return Promise.reject(); }
-      if (!formData.amount || isNaN(formData.amount)) { if (window.toast) window.toast("Please enter a valid amount.", "error"); return Promise.reject(); }
-    },
-    onAfterPrint: () => saveToDb()
+    onAfterPrint: () => setIsPrinting(false),
   });
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    if (serverError) { if (window.toast) window.toast("System Offline: Cannot print.", "error"); return; }
+    if (!formData.amount || isNaN(formData.amount)) { if (window.toast) window.toast("Please enter a valid amount.", "error"); return; }
+
+    setIsPrinting(true);
+
     if (isMobile()) {
-      handleMobilePrint();
+      await handleMobilePrint();
     } else {
+      const saved = await saveToDb();
+      if (!saved) { setIsPrinting(false); return; }
       triggerPrint();
     }
   };
@@ -893,7 +896,6 @@ const Receipt = ({ theme }) => {
                   <div>
                     <label className={labelClass}>
                       File No
-                      {/* Subtle hint for 6-digit shorthand */}
                       <span className={`ml-1 font-normal normal-case ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>(or YYseq)</span>
                     </label>
                     <div className="relative">
@@ -915,7 +917,7 @@ const Receipt = ({ theme }) => {
                           className={`w-full p-1.5 text-sm font-mono tracking-wide font-bold text-blue-600 focus:outline-none ${isDark ? 'bg-gray-700 text-red-400' : 'bg-white'}`}
                           placeholder="XXXX"
                         />
-                        {/* "older entries" toggle — only shown when duplicates exist */}
+                        {/* "older entries" toggle */}
                         {fileNoOlderMatches.length > 0 && (
                           <button
                             type="button"
@@ -994,15 +996,27 @@ const Receipt = ({ theme }) => {
               </fieldset>
 
               <button
-                onClick={handlePrint} disabled={serverError}
+                onClick={handlePrint}
+                disabled={serverError || isPrinting}
                 className={`w-full mt-3 font-bold py-2.5 px-4 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all ${
-                  serverError ? "bg-gray-400 cursor-not-allowed text-gray-200"
-                    : formData.status === 'CANCELLED' ? "bg-red-500 text-white cursor-not-allowed"
+                  serverError || isPrinting
+                    ? "bg-gray-400 cursor-not-allowed text-gray-200"
+                    : formData.status === 'CANCELLED'
+                    ? "bg-red-500 text-white cursor-not-allowed"
                     : "bg-blue-600 hover:bg-blue-700 text-white"
                 }`}
               >
-                {serverError ? <WifiOff size={18} /> : <Printer size={18} />}
-                {serverError ? "Offline" : isEditing ? "Update & Print" : "Save & Print"}
+                {serverError ? (
+                  <WifiOff size={18} />
+                ) : isPrinting ? (
+                  <svg className="animate-spin" width={18} height={18} viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3" />
+                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <Printer size={18} />
+                )}
+                {serverError ? "Offline" : isPrinting ? "Saving..." : isEditing ? "Update & Print" : "Save & Print"}
               </button>
             </div>
           </div>
