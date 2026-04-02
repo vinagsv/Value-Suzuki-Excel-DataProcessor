@@ -95,24 +95,31 @@ router.get('/sequences', async (req, res) => {
         let dp = 0, gatepass = 0, general = 0;
 
         try {
-            const dpRes = await pool.query("SELECT last_value FROM dp_receipts_receipt_no_seq");
-            dp = parseInt(dpRes.rows[0]?.last_value || 0, 10);
+            const dpRes = await pool.query("SELECT last_value, is_called FROM dp_receipts_receipt_no_seq");
+            if (dpRes.rows.length > 0) {
+                const { last_value, is_called } = dpRes.rows[0];
+                dp = is_called ? parseInt(last_value, 10) + 1 : parseInt(last_value, 10);
+            }
         } catch(e) { console.error("DP seq error", e.message); }
 
         try {
-            const gpRes = await pool.query("SELECT last_value FROM gate_passes_pass_no_seq");
-            gatepass = parseInt(gpRes.rows[0]?.last_value || 0, 10);
+            const gpRes = await pool.query("SELECT last_value, is_called FROM gate_passes_pass_no_seq");
+            if (gpRes.rows.length > 0) {
+                const { last_value, is_called } = gpRes.rows[0];
+                gatepass = is_called ? parseInt(last_value, 10) + 1 : parseInt(last_value, 10);
+            }
         } catch(e) { console.error("GP seq error", e.message); }
 
         try {
             const genRes = await pool.query("SELECT value FROM app_settings WHERE key = 'receipt_seq'");
-            general = parseInt(genRes.rows[0]?.value || 0, 10);
+            // Stored as value-1, so next is value + 1
+            general = parseInt(genRes.rows[0]?.value || 0, 10) + 1;
         } catch(e) { console.error("Gen seq error", e.message); }
 
         res.json({
-            dp: dp + 1,
-            gatepass: gatepass + 1,
-            general: general + 1
+            dp: dp,
+            gatepass: gatepass,
+            general: general
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -127,10 +134,12 @@ router.post('/reset-sequence', async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
+        
+        // setval with 'false' ensures that the very next usage of the sequence returns 'val' without incrementing first
         if (type === 'dp') {
-            await client.query(`ALTER SEQUENCE dp_receipts_receipt_no_seq RESTART WITH ${val}`);
+            await client.query(`SELECT setval('dp_receipts_receipt_no_seq', $1::bigint, false)`, [val]);
         } else if (type === 'gatepass') {
-            await client.query(`ALTER SEQUENCE gate_passes_pass_no_seq RESTART WITH ${val}`);
+            await client.query(`SELECT setval('gate_passes_pass_no_seq', $1::bigint, false)`, [val]);
         } else if (type === 'general') {
             await client.query(`INSERT INTO app_settings (key, value) VALUES ('receipt_seq', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [String(val - 1)]);
             const currentYY = getFinancialYearYY();

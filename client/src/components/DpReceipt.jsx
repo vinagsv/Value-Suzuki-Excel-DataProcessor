@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { ToWords } from 'to-words';
-import { Printer, RefreshCw, FileSpreadsheet, Search, Edit3, XCircle } from 'lucide-react';
+import { Printer, FileSpreadsheet, Search, Edit3, XCircle, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import tailwindStyles from '../index.css?inline'; 
 
@@ -52,12 +52,21 @@ const DpReceipt = ({ theme }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [availableMonths, setAvailableMonths] = useState([]);
   const [exportMonth, setExportMonth] = useState('');
+  
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
 
   useEffect(() => {
     fetchNextReceiptNo();
     fetchHistory();
     fetchAvailableMonths();
   }, []);
+
+  // Reset to first page when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, exportMonth]);
 
   const fetchNextReceiptNo = async () => {
     try {
@@ -106,6 +115,29 @@ const DpReceipt = ({ theme }) => {
     fetchNextReceiptNo();
   };
 
+  const handleDelete = async () => {
+    if (!window.confirm(`Are you sure you want to completely delete Receipt No: ${formData.receiptNo}? This action cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+      const res = await fetch(`${API_URL}/receipts/${formData.receiptNo}`, {
+        method: 'DELETE'
+      });
+      
+      if (res.ok) {
+        await fetchHistory();
+        await fetchAvailableMonths();
+        cancelEdit();
+      } else {
+        alert("Failed to delete receipt from the database.");
+      }
+    } catch (err) {
+      alert("Error deleting receipt.");
+      console.error(err);
+    }
+  };
+
   const saveToDb = async () => {
     const method = isEditing ? 'PUT' : 'POST';
     const url = isEditing ? `${API_URL}/receipts/${formData.receiptNo}` : `${API_URL}/receipts`;
@@ -115,6 +147,7 @@ const DpReceipt = ({ theme }) => {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          receiptNo: formData.receiptNo,
           date: formData.date,
           customer_name: formData.customerName,
           amount: formData.amount,
@@ -157,6 +190,13 @@ const DpReceipt = ({ theme }) => {
     const lower = searchTerm.toLowerCase();
     return history.filter(item => item.customer_name?.toLowerCase().includes(lower) || String(item.receipt_no).includes(lower));
   }, [history, searchTerm]);
+
+  // Apply Pagination
+  const totalPages = Math.ceil(filteredHistory.length / itemsPerPage);
+  const paginatedHistory = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredHistory.slice(start, start + itemsPerPage);
+  }, [filteredHistory, currentPage]);
 
   const processExport = (data, filename) => {
     const dataToExport = data.map(item => ({ "Receipt No": item.receipt_no, "Date": new Date(item.date).toLocaleDateString(), "Customer Name": item.customer_name, "Model": item.model, "Financier": item.hp_financier, "Amount": item.amount, "Mode": item.payment_mode }));
@@ -226,7 +266,7 @@ const DpReceipt = ({ theme }) => {
           <div className="border-t border-black pt-1 px-4 inline-block text-base font-semibold">Authorised Signatory</div>
         </div>
       </div>
-      <div className={`mt-${LAYOUT.disclaimerMarginTop} border-t border-gray-300 pt-4 text-xs font-extrabold text-black uppercase tracking-tight`}>Note: Prices prevailing at the time of Delivery applicable. Any cancellation subject to 10% deduction.... (for finance DP purpose only)</div>
+      <div className={`mt-${LAYOUT.disclaimerMarginTop} border-t border-gray-300 pt-4 text-sm font-extrabold text-black uppercase tracking-tight`}>Note: Prices prevailing at the time of Delivery applicable. Any cancellation subject to 10% deduction.... (for finance DP purpose only)</div>
     </>
   );
 
@@ -277,12 +317,12 @@ const DpReceipt = ({ theme }) => {
               </h2>
               <div className="flex gap-2">
                   {isEditing && (
-                      <button onClick={cancelEdit} className="text-red-500 hover:text-red-700 flex items-center gap-1 text-xs font-bold uppercase">
-                          <XCircle size={16} /> Cancel
+                      <button onClick={handleDelete} className="text-red-500 hover:text-red-700 flex items-center gap-1 text-xs font-bold uppercase transition" title="Delete Receipt">
+                          <Trash2 size={16} /> Delete
                       </button>
                   )}
-                  <button onClick={fetchNextReceiptNo} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition" title="Refresh Number">
-                    <RefreshCw size={16} />
+                  <button onClick={cancelEdit} className="text-gray-500 hover:text-gray-700 flex items-center gap-1 text-xs font-bold uppercase transition" title={isEditing ? "Cancel Edit" : "Clear Form"}>
+                      <XCircle size={16} /> {isEditing ? "Cancel" : "Clear"}
                   </button>
               </div>
             </div>
@@ -293,7 +333,7 @@ const DpReceipt = ({ theme }) => {
                 <div><label className={labelClass}>Amount (₹)</label><input type="number" name="amount" value={formData.amount} onChange={handleChange} className={inputClass} /></div>
                 <div><label className={labelClass}>Date</label><input type="date" name="date" value={formData.date} onChange={handleChange} className={inputClass} /></div>
               </div>
-              <div><label className={labelClass}>Receipt No</label><input type="number" name="receiptNo" value={formData.receiptNo} readOnly className={`${inputClass} opacity-70 cursor-not-allowed`} /></div>
+              <div><label className={labelClass}>Receipt No (Editable)</label><input type="number" name="receiptNo" value={formData.receiptNo} onChange={handleChange} className={inputClass} /></div>
               <div><label className={labelClass}>HP (Financier)</label><input name="hp" value={formData.hp} onChange={handleChange} className={inputClass} /></div>
               <div><label className={labelClass}>Model</label><input name="model" value={formData.model} onChange={handleChange} className={inputClass} /></div>
               <button onClick={handlePrint} className={`w-full mt-6 ${isEditing ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-600 hover:bg-blue-700"} text-white font-bold py-3 px-4 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all`}>
@@ -334,7 +374,7 @@ const DpReceipt = ({ theme }) => {
                 <tr><th className={tableHeaderClass}>Receipt No</th><th className={tableHeaderClass}>Date</th><th className={tableHeaderClass}>Customer</th><th className={tableHeaderClass}>Amount</th><th className={tableHeaderClass}>Action</th></tr>
               </thead>
               <tbody>
-                {filteredHistory.map((item) => (
+                {paginatedHistory.map((item) => (
                   <tr key={item.receipt_no} className={`${tableRowClass} group cursor-pointer`} onClick={() => handleEdit(item)}>
                     <td className={`px-4 py-3 font-medium ${isDark ? "text-gray-300" : "text-gray-800"}`}>{item.receipt_no}</td>
                     <td className={`px-4 py-3 ${isDark ? "text-gray-400" : "text-gray-600"}`}>{new Date(item.date).toLocaleDateString()}</td>
@@ -350,6 +390,32 @@ const DpReceipt = ({ theme }) => {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className={`flex items-center justify-between mt-4 px-4 py-3 rounded-lg border ${isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+              <button 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+                disabled={currentPage === 1} 
+                className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium transition-colors ${isDark ? 'bg-gray-800 border-gray-600 text-white hover:bg-gray-600' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                <ChevronLeft size={16} /> Previous
+              </button>
+              
+              <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                Page <span className="font-bold">{currentPage}</span> of {totalPages}
+              </span>
+              
+              <button 
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
+                disabled={currentPage === totalPages} 
+                className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium transition-colors ${isDark ? 'bg-gray-800 border-gray-600 text-white hover:bg-gray-600' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                Next <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
+
         </div>
       </div> {/* End of no-print wrapper */}
 

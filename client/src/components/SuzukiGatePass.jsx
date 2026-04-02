@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useReactToPrint } from 'react-to-print';
-import { Printer, Search, FileSpreadsheet, Edit3, XCircle, WifiOff, RefreshCw } from 'lucide-react';
+import { Printer, Search, FileSpreadsheet, Edit3, XCircle, WifiOff, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import tailwindStyles from '../index.css?inline';
 
@@ -41,6 +41,10 @@ const SuzukiGatePass = ({ theme }) => {
   const [availableMonths, setAvailableMonths] = useState([]);
   const [exportMonth, setExportMonth] = useState('');
   const [serverError, setServerError] = useState(false);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
 
   // --- SAFE API CALLS ---
 
@@ -92,6 +96,11 @@ const SuzukiGatePass = ({ theme }) => {
     fetchAvailableMonths();
   }, []);
 
+  // Reset to first page when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [historySearchTerm, exportMonth]);
+
   const handleSearchInput = (e) => setSearchQuery(e.target.value);
 
   useEffect(() => {
@@ -125,7 +134,7 @@ const SuzukiGatePass = ({ theme }) => {
       model: vehicle.model || '',
       color: vehicle.color || ''
     }));
-    setSearchResults([]); // ✅ fixed: was incorrectly calling searchResults([])
+    setSearchResults([]); 
     setSearchQuery('');
   };
 
@@ -154,6 +163,29 @@ const SuzukiGatePass = ({ theme }) => {
     fetchNextPassNo();
   };
 
+  const handleDelete = async () => {
+    if (!window.confirm(`Are you sure you want to completely delete Gate Pass No: ${formData.passNo}? This action cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+      const res = await fetch(`${API_URL}/gatepass/${formData.passNo}`, {
+        method: 'DELETE'
+      });
+      
+      if (res.ok) {
+        await fetchHistory();
+        await fetchAvailableMonths();
+        cancelEdit();
+      } else {
+        alert("Failed to delete gate pass from the database.");
+      }
+    } catch (err) {
+      alert("Error deleting gate pass.");
+      console.error(err);
+    }
+  };
+
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const saveToDb = async () => {
@@ -167,6 +199,7 @@ const SuzukiGatePass = ({ theme }) => {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          passNo: formData.passNo,
           date: formData.date,
           customer_name: formData.customerName,
           model: formData.model,
@@ -184,7 +217,6 @@ const SuzukiGatePass = ({ theme }) => {
 
       await fetchHistory();
       await fetchAvailableMonths();
-      if (!isEditing) await fetchNextPassNo();
 
       if (isEditing) {
         setIsEditing(false);
@@ -192,6 +224,7 @@ const SuzukiGatePass = ({ theme }) => {
         fetchNextPassNo();
       } else {
         setFormData(prev => ({ ...prev, customerName: '', regnNo: '', chassisNo: '', salesBillNo: '', sparesBillNo: '', serviceBillNo: '', narration: '' }));
+        await fetchNextPassNo();
       }
     } catch (err) { alert("Failed to save to database."); }
   };
@@ -218,6 +251,13 @@ const SuzukiGatePass = ({ theme }) => {
       String(item.pass_no || '').includes(lower)
     );
   }, [history, historySearchTerm]);
+
+  // Apply Pagination
+  const totalPages = Math.ceil(filteredHistory.length / itemsPerPage);
+  const paginatedHistory = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredHistory.slice(start, start + itemsPerPage);
+  }, [filteredHistory, currentPage]);
 
   const processExport = (data, filename) => {
     const dataToExport = data.map(item => ({ "Pass No": item.pass_no, "Date": new Date(item.date).toLocaleDateString(), "Customer": item.customer_name, "Model": item.model, "Chassis No": item.chassis_no, "Regn No": item.regn_no, "Sales Bill": item.sales_bill_no, "Spares Bill": item.spares_bill_no, "Service Bill": item.service_bill_no, "Narration": item.narration }));
@@ -327,12 +367,14 @@ const SuzukiGatePass = ({ theme }) => {
               </h2>
               <div className="flex gap-2">
                 {isEditing && (
-                  <button onClick={cancelEdit} className="text-red-500 hover:text-red-700 flex items-center gap-1 text-[10px] font-bold uppercase">
-                    <XCircle size={14} /> Cancel
+                  <button onClick={handleDelete} className="text-red-500 hover:text-red-700 flex items-center gap-1 text-[10px] font-bold uppercase transition" title="Delete Gate Pass">
+                    <Trash2 size={14} /> Delete
                   </button>
                 )}
                 {!serverError && (
-                  <button onClick={fetchNextPassNo} className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition"><RefreshCw size={14} /></button>
+                  <button onClick={cancelEdit} className="text-gray-500 hover:text-gray-700 flex items-center gap-1 text-[10px] font-bold uppercase transition" title={isEditing ? "Cancel Edit" : "Clear Form"}>
+                    <XCircle size={14} /> {isEditing ? "Cancel" : "Clear"}
+                  </button>
                 )}
               </div>
             </div>
@@ -372,7 +414,7 @@ const SuzukiGatePass = ({ theme }) => {
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <div><label className={labelClass}>Pass No</label><input name="passNo" value={formData.passNo} readOnly className={`${inputClass} opacity-70`} /></div>
+                <div><label className={labelClass}>Pass No (Editable)</label><input name="passNo" value={formData.passNo} onChange={handleChange} className={inputClass} /></div>
                 <div><label className={labelClass}>Date</label><input type="date" name="date" value={formData.date} onChange={handleChange} className={inputClass} /></div>
               </div>
               <div><label className={labelClass}>Customer Name</label><input name="customerName" value={formData.customerName} onChange={handleChange} className={inputClass} /></div>
@@ -425,12 +467,13 @@ const SuzukiGatePass = ({ theme }) => {
           <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
             <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-800"}`}>History</h2>
             <div className="flex gap-2 items-center flex-wrap">
-              <input value={historySearchTerm} onChange={(e) => setHistorySearchTerm(e.target.value)} className={`${inputClass} w-48`} placeholder="Search displayed..." />
+              {/* Search is now inside the gray background grouping next to export options */}
               <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg border border-gray-300">
                 <select className="bg-transparent text-sm p-1 outline-none text-gray-700 font-medium" value={exportMonth} onChange={(e) => setExportMonth(e.target.value)}>
                   <option value="">Current View (Last 500)</option>
                   {availableMonths.map(m => <option key={m} value={m}>{m} (Full Month)</option>)}
                 </select>
+                <input value={historySearchTerm} onChange={(e) => setHistorySearchTerm(e.target.value)} className={`${inputClass} w-48`} placeholder="Search displayed..." />
                 <button onClick={handleExport} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm font-bold flex gap-2 items-center transition-colors"><FileSpreadsheet size={16} /> Export</button>
               </div>
             </div>
@@ -441,7 +484,7 @@ const SuzukiGatePass = ({ theme }) => {
                 <tr><th className={tableHeaderClass}>Pass No</th><th className={tableHeaderClass}>Date</th><th className={tableHeaderClass}>Customer</th><th className={tableHeaderClass}>Chassis</th><th className={tableHeaderClass}>Action</th></tr>
               </thead>
               <tbody>
-                {filteredHistory.map(item => (
+                {paginatedHistory.map(item => (
                   <tr key={item.pass_no} className={`${tableRowClass} group cursor-pointer`} onClick={() => handleEdit(item)}>
                     <td className="px-4 py-3">{item.pass_no}</td>
                     <td className="px-4 py-3">{new Date(item.date).toLocaleDateString()}</td>
@@ -457,6 +500,32 @@ const SuzukiGatePass = ({ theme }) => {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className={`flex items-center justify-between mt-4 px-4 py-3 rounded-lg border ${isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+              <button 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+                disabled={currentPage === 1} 
+                className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium transition-colors ${isDark ? 'bg-gray-800 border-gray-600 text-white hover:bg-gray-600' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                <ChevronLeft size={16} /> Previous
+              </button>
+              
+              <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                Page <span className="font-bold">{currentPage}</span> of {totalPages}
+              </span>
+              
+              <button 
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
+                disabled={currentPage === totalPages} 
+                className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium transition-colors ${isDark ? 'bg-gray-800 border-gray-600 text-white hover:bg-gray-600' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                Next <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
+
         </div>
       </div>
 

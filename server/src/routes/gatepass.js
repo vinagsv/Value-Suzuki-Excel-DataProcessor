@@ -6,10 +6,20 @@ const router = express.Router();
 // Get Next Pass Number
 router.get('/next', async (req, res) => {
   try {
-    const result = await pool.query("SELECT last_value + 1 as next_no FROM gate_passes_pass_no_seq");
-    res.json({ nextNo: parseInt(result.rows[0].next_no) });
+    const seqResult = await pool.query("SELECT last_value, is_called FROM gate_passes_pass_no_seq");
+    const { last_value, is_called } = seqResult.rows[0];
+    
+    // Check is_called to avoid returning +1 when sequence has just been reset
+    const nextNo = is_called ? parseInt(last_value) + 1 : parseInt(last_value);
+    
+    res.json({ nextNo });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    try {
+        const result = await pool.query("SELECT last_value + 1 as next_no FROM gate_passes_pass_no_seq");
+        res.json({ nextNo: parseInt(result.rows[0].next_no) });
+    } catch (fallbackErr) {
+        res.status(500).json({ error: fallbackErr.message });
+    }
   }
 });
 
@@ -25,18 +35,22 @@ router.get('/months', async (req, res) => {
 
 // Save Gate Pass + Auto Cleanup
 router.post('/', async (req, res) => {
-  const { date, customer_name, model, color, regn_no, chassis_no, sales_bill_no, spares_bill_no, service_bill_no, narration } = req.body;
+  const { passNo, date, customer_name, model, color, regn_no, chassis_no, sales_bill_no, spares_bill_no, service_bill_no, narration } = req.body;
   
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
+    // Explicitly insert the pass_no provided by the user
     const result = await client.query(
       `INSERT INTO gate_passes 
-      (date, customer_name, model, color, regn_no, chassis_no, sales_bill_no, spares_bill_no, service_bill_no, narration)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING pass_no`,
-      [date, customer_name, model, color, regn_no, chassis_no, sales_bill_no, spares_bill_no, service_bill_no, narration]
+      (pass_no, date, customer_name, model, color, regn_no, chassis_no, sales_bill_no, spares_bill_no, service_bill_no, narration)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING pass_no`,
+      [passNo, date, customer_name, model, color, regn_no, chassis_no, sales_bill_no, spares_bill_no, service_bill_no, narration]
     );
+
+    // Automatically advance sequence if user manually typed a high number
+    await client.query(`SELECT setval('gate_passes_pass_no_seq', GREATEST((SELECT last_value FROM gate_passes_pass_no_seq), $1::bigint), true)`, [passNo]);
 
     // Auto cleanup data older than 2 years
     await client.query("DELETE FROM gate_passes WHERE date < NOW() - INTERVAL '2 years'");
@@ -51,7 +65,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// NEW: Update Existing Gate Pass
+// Update Existing Gate Pass
 router.put('/:pass_no', async (req, res) => {
   const { pass_no } = req.params;
   const { date, customer_name, model, color, regn_no, chassis_no, sales_bill_no, spares_bill_no, service_bill_no, narration } = req.body;
@@ -70,6 +84,23 @@ router.put('/:pass_no', async (req, res) => {
   }
 });
 
+// Delete Gate Pass
+router.delete('/:pass_no', async (req, res) => {
+  const { pass_no } = req.params;
+
+  try {
+    const result = await pool.query(`DELETE FROM gate_passes WHERE pass_no = $1 RETURNING pass_no`, [pass_no]);
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Gate pass not found" });
+    }
+    
+    res.json({ success: true, message: "Gate pass deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // List History
 router.get('/list', async (req, res) => {
   try {
@@ -77,11 +108,12 @@ router.get('/list', async (req, res) => {
     let query = "SELECT * FROM gate_passes";
     let params = [];
 
+    // Ordered by date DESC first to ensure latest entries stay at top, regardless of pass_no resets
     if (month) {
-      query += " WHERE to_char(date, 'YYYY-MM') = $1 ORDER BY pass_no DESC";
+      query += " WHERE to_char(date, 'YYYY-MM') = $1 ORDER BY date DESC, pass_no DESC";
       params.push(month);
     } else {
-      query += " ORDER BY pass_no DESC LIMIT 500";
+      query += " ORDER BY date DESC, pass_no DESC LIMIT 500";
     }
 
     const result = await pool.query(query, params);
