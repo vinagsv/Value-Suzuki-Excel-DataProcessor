@@ -178,6 +178,15 @@ const Receipt = ({ theme }) => {
     fetchNextReceiptNo();
   };
 
+  const doPostSaveReset = async () => {
+    if (isEditing) {
+      resetForm();
+    } else {
+      setFormData(prev => ({ ...initialForm, date: prev.date, receiptNo: prev.receiptNo, fileNoSeq: '' }));
+      await fetchNextReceiptNo();
+    }
+  };
+
   // ─── Apply a matched history record to the form ───────────────────────────
   const applyFileNoMatch = (match, typedSeq) => {
     const fileNo = (match.file_no || '').replace(/\s/g, '');
@@ -320,7 +329,7 @@ const Receipt = ({ theme }) => {
     await saveToDb(updatedForm);
   };
 
-  const saveToDb = async (dataOverride = null) => {
+  const saveToDb = async (dataOverride = null, skipReset = false) => {
     if (serverError) { if (window.toast) window.toast("System Offline: Cannot save data.", "error"); return false; }
     const dataToSave = dataOverride || formData;
     const finalFileNo = currentFilePrefix + dataToSave.fileNoSeq.trim();
@@ -347,11 +356,11 @@ const Receipt = ({ theme }) => {
       if (window.toast) window.toast("Receipt Saved Successfully", "success");
       setFormData(prev => ({ ...prev, customerName: titleCasedName }));
       fetchHistory(); fetchAvailableMonths();
-      if (isEditing) { resetForm(); }
-      else {
-        setFormData(prev => ({ ...initialForm, date: prev.date, receiptNo: prev.receiptNo, fileNoSeq: '' }));
-        await fetchNextReceiptNo();
+      
+      if (!skipReset) {
+        await doPostSaveReset();
       }
+      
       return true;
     } catch { if (window.toast) window.toast("Error saving receipt. Please check connection.", "error"); return false; }
   };
@@ -487,8 +496,9 @@ const Receipt = ({ theme }) => {
           <div style="font-size:9px;font-weight:900;color:#1f2937;text-transform:uppercase;line-height:1.3;letter-spacing:0.04em;">
             WE BANK WITH STATE BANK OF INDIA | A/C NO: 32744599339 | IFSC: SBIN0021882 | BRANCH: VASANTHNAGAR
           </div>
-          <div style="font-size:8px;font-weight:900;color:black;text-transform:uppercase;margin-top:1px;letter-spacing:0.06em;">
-            NOTE: CHEQUES SUBJECT TO REALISATION. PRICES PREVAILING AT THE TIME OF DELIVERY APPLICABLE. ANY CANCELLATION SUBJECT TO 10% DEDUCTION.
+          <div style="font-size:8.5px;font-weight:900;color:black;text-transform:uppercase;margin-top:2px;letter-spacing:0.04em;line-height:1.2;">
+            <div>CHEQUES SUBJECT TO REALISATION. ANY CANCELLATION SUBJECT TO 10% DEDUCTION.</div>
+            <div>PRICES PREVAILING AT THE TIME OF DELIVERY APPLICABLE.</div>
           </div>
         </div>
       </div>`;
@@ -498,7 +508,7 @@ const Receipt = ({ theme }) => {
     if (serverError) { if (window.toast) window.toast("System Offline: Cannot print.", "error"); setIsPrinting(false); return; }
     if (!formData.amount || isNaN(formData.amount)) { if (window.toast) window.toast("Please enter a valid amount.", "error"); setIsPrinting(false); return; }
 
-    const saved = await saveToDb();
+    const saved = await saveToDb(null, true);
     if (!saved) { setIsPrinting(false); return; }
 
     const receiptBody1 = buildReceiptHtmlString('customer');
@@ -580,27 +590,32 @@ const Receipt = ({ theme }) => {
     printWindow.document.write(fullHtml);
     printWindow.document.close();
 
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-        setIsPrinting(false);
-      }, 600);
-    };
-
-    setTimeout(() => {
+    let printTriggered = false;
+    const doPrintAndReset = () => {
+      if (printTriggered) return;
+      printTriggered = true;
       if (printWindow && !printWindow.closed) {
         printWindow.focus();
         printWindow.print();
-        setIsPrinting(false);
       }
-    }, 2500);
+      setIsPrinting(false);
+      doPostSaveReset();
+    };
+
+    printWindow.onload = () => {
+      setTimeout(doPrintAndReset, 600);
+    };
+
+    setTimeout(doPrintAndReset, 2500);
   };
 
   const triggerPrint = useReactToPrint({
     contentRef: componentRef,
     documentTitle: `Receipt_${formData.receiptNo}`,
-    onAfterPrint: () => setIsPrinting(false),
+    onAfterPrint: () => {
+      setIsPrinting(false);
+      doPostSaveReset();
+    },
   });
 
   const handlePrint = async () => {
@@ -612,7 +627,7 @@ const Receipt = ({ theme }) => {
     if (isMobile()) {
       await handleMobilePrint();
     } else {
-      const saved = await saveToDb();
+      const saved = await saveToDb(null, true);
       if (!saved) { setIsPrinting(false); return; }
       triggerPrint();
     }
@@ -794,8 +809,9 @@ const Receipt = ({ theme }) => {
         <div style={{ fontSize: '9px', fontWeight: 900, color: '#1f2937', textTransform: 'uppercase', lineHeight: 1.3, letterSpacing: '0.04em' }}>
           WE BANK WITH STATE BANK OF INDIA | A/C NO: 32744599339 | IFSC: SBIN0021882 | BRANCH: VASANTHNAGAR
         </div>
-        <div style={{ fontSize: '8px', fontWeight: 900, color: 'black', textTransform: 'uppercase', marginTop: '1px', letterSpacing: '0.06em' }}>
-          NOTE: CHEQUES SUBJECT TO REALISATION. PRICES PREVAILING AT THE TIME OF DELIVERY APPLICABLE. ANY CANCELLATION SUBJECT TO 10% DEDUCTION.
+        <div style={{ fontSize: '8.5px', fontWeight: 900, color: 'black', textTransform: 'uppercase', marginTop: '2px', letterSpacing: '0.04em', lineHeight: 1.2 }}>
+          <div>CHEQUES SUBJECT TO REALISATION. ANY CANCELLATION SUBJECT TO 10% DEDUCTION.</div>
+          <div>PRICES PREVAILING AT THE TIME OF DELIVERY APPLICABLE.</div>
         </div>
       </div>
     </div>
