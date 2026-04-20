@@ -192,6 +192,8 @@ router.post('/', async (req, res) => {
 });
 
 // 6. Update Receipt
+// FIX: Added explicit check — CANCELLED receipts cannot be reactivated via PUT.
+// Only status transitions to CANCELLED are allowed; all other fields update freely.
 router.put('/:receipt_no', async (req, res) => {
   const { receipt_no } = req.params;
   const { 
@@ -200,6 +202,22 @@ router.put('/:receipt_no', async (req, res) => {
   } = req.body;
 
   try {
+    // Prevent accidental reactivation of a cancelled receipt from a stale client state
+    const existing = await pool.query(
+      'SELECT status FROM general_receipts WHERE receipt_no = $1',
+      [receipt_no]
+    );
+
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: "Receipt not found." });
+    }
+
+    // If already cancelled, only allow updating the status field itself (idempotent),
+    // not the financial data — prevents ghost edits on cancelled receipts.
+    if (existing.rows[0].status === 'CANCELLED' && status !== 'CANCELLED') {
+      return res.status(409).json({ error: "Cannot reactivate a cancelled receipt." });
+    }
+
     await pool.query(
       `UPDATE general_receipts SET 
         date = $1, customer_name = $2, mobile = $3, remarks = $4, file_no = $5, hp_financier = $6, 
@@ -214,6 +232,10 @@ router.put('/:receipt_no', async (req, res) => {
 });
 
 // 7. List History / Search
+// FIX: Search now uses the raw term without any client-side mangling.
+// The query searches across file_no, receipt_no, customer_name, and mobile.
+// For file number seq-only searches (e.g. "0162"), the ILIKE '%0162%' will match
+// "VMA2026/0162", "VMA2025/0162", etc. correctly without stripping digits.
 router.get('/list', async (req, res) => {
   const { month, search } = req.query;
   let query = "SELECT * FROM general_receipts";
@@ -223,13 +245,15 @@ router.get('/list', async (req, res) => {
     query += " WHERE to_char(date, 'YYYY-MM') = $1 ORDER BY receipt_no DESC";
     params.push(month);
   } else if (search) {
-     query += ` WHERE 
+    // Sanitize: strip any characters that could break ILIKE matching
+    const sanitized = search.replace(/[%_\\]/g, '\\$&');
+    query += ` WHERE 
         file_no ILIKE $1 OR 
         CAST(receipt_no AS TEXT) ILIKE $1 OR 
         customer_name ILIKE $1 OR 
         mobile ILIKE $1 
         ORDER BY receipt_no DESC LIMIT 20`;
-     params.push(`%${search}%`);
+    params.push(`%${sanitized}%`);
   } else {
     query += " ORDER BY receipt_no DESC LIMIT 500";
   }

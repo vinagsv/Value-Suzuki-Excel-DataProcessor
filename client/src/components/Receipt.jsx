@@ -190,12 +190,11 @@ const Receipt = ({ theme }) => {
   // ─── Apply a matched history record to the form ───────────────────────────
   const applyFileNoMatch = (match, typedSeq) => {
     const fileNo = (match.file_no || '').replace(/\s/g, '');
-    const cleanSeq = typedSeq.replace(/\s/g, '');
     const detectedPrefix = extractPrefixFromFileNo(fileNo, extractSeqFromFileNo(fileNo));
     setCurrentFilePrefix(detectedPrefix);
     setFormData(prev => ({
       ...prev,
-      fileNoSeq: extractSeqFromFileNo(fileNo), // use the canonical seq from the record
+      fileNoSeq: extractSeqFromFileNo(fileNo),
       customerName: match.customer_name,
       mobile: match.mobile || '',
       model: match.model || '',
@@ -210,7 +209,19 @@ const Receipt = ({ theme }) => {
     setFileNoOlderMatches([]);
     setShowOlderEntries(false);
 
-    if (!Array.isArray(history) || rawInput.trim().length < 3) return;
+    // If input is too short, clear any previously autofilled fields and reset prefix
+    if (!Array.isArray(history) || rawInput.trim().length < 3) {
+      setFormData(prev => ({
+        ...prev,
+        fileNoSeq: rawInput,
+        customerName: '',
+        mobile: '',
+        model: '',
+        hp: ''
+      }));
+      setCurrentFilePrefix(filePrefix);
+      return;
+    }
 
     const cleanInput = rawInput.replace(/\s/g, '');
 
@@ -230,6 +241,22 @@ const Receipt = ({ theme }) => {
         applyFileNoMatch(yearMatch, seqHint);
         return;
       }
+
+      // No history match — but we still know the intent: YY=yearHint, seq=seqHint.
+      // Build the correct year-specific prefix so we never produce VMA2026/260169.
+      // Replace the year portion in the current admin prefix with the typed year.
+      // e.g. admin prefix "VMA2026/" + yearHint "25" → corrected prefix "VMA2025/"
+      const correctedPrefix = filePrefix.replace(/20\d{2}/, '20' + yearHint);
+      setCurrentFilePrefix(correctedPrefix);
+      setFormData(prev => ({
+        ...prev,
+        fileNoSeq: seqHint,
+        customerName: '',
+        mobile: '',
+        model: '',
+        hp: ''
+      }));
+      return;
     }
 
     // ── Normal seq search: collect ALL records matching the typed seq ────────
@@ -240,7 +267,19 @@ const Receipt = ({ theme }) => {
       return seq === cleanInput;
     });
 
-    if (allMatches.length === 0) return;
+    // FIX: No match found — clear any previously autofilled customer fields
+    if (allMatches.length === 0) {
+      setFormData(prev => ({
+        ...prev,
+        fileNoSeq: rawInput,
+        customerName: '',
+        mobile: '',
+        model: '',
+        hp: ''
+      }));
+      setCurrentFilePrefix(filePrefix);
+      return;
+    }
 
     // Sort by prefix descending so latest year is first
     const sorted = [...allMatches].sort((a, b) => {
@@ -271,13 +310,13 @@ const Receipt = ({ theme }) => {
     setFileNoOlderMatches([]);
   };
 
+  // FIX: Search bar no longer mangles 6-digit input — sends raw term to server
   const handleSearchInput = async (e) => {
     const term = e.target.value;
     setSearchTerm(term);
     if (term.length > 2) {
-      const queryTerm = /^\d{6}$/.test(term) ? term.substring(2) : term;
       try {
-        const res = await fetch(`${API_URL}/general-receipts/list?search=${queryTerm}`);
+        const res = await fetch(`${API_URL}/general-receipts/list?search=${encodeURIComponent(term)}`);
         if (res.ok) setSearchResults(await res.json());
       } catch(e) { console.error(e); }
     } else { setSearchResults([]); }
@@ -322,7 +361,9 @@ const Receipt = ({ theme }) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // FIX: Guard against cancelling a receipt that isn't in edit mode (would POST instead of PUT)
   const handleCancelReceipt = async () => {
+    if (!isEditing) return;
     if (!window.confirm("Are you sure you want to CANCEL this receipt? This will be watermarked.")) return;
     const updatedForm = { ...formData, status: 'CANCELLED' };
     setFormData(updatedForm);
