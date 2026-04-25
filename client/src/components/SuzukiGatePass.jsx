@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useReactToPrint } from 'react-to-print';
-import { Printer, Search, FileSpreadsheet, Edit3, XCircle, WifiOff, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Printer, Search, FileSpreadsheet, Edit3, XCircle, WifiOff, Trash2, ChevronLeft, ChevronRight, Database, Loader2, CheckCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import tailwindStyles from '../index.css?inline';
 
@@ -41,6 +41,11 @@ const SuzukiGatePass = ({ theme }) => {
   const [availableMonths, setAvailableMonths] = useState([]);
   const [exportMonth, setExportMonth] = useState('');
   const [serverError, setServerError] = useState(false);
+  
+  // Database Update State
+  const [form22File, setForm22File] = useState(null);
+  const [dbUploading, setDbUploading] = useState(false);
+  const [dbStatus, setDbStatus] = useState(null);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -228,6 +233,42 @@ const SuzukiGatePass = ({ theme }) => {
       }
     } catch (err) { alert("Failed to save to database."); }
   };
+  
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setForm22File(file);
+      setDbStatus(null);
+    }
+  };
+
+  const uploadToDatabase = async () => {
+    if (!form22File) return;
+    setDbUploading(true);
+    setDbStatus(null);
+
+    const formPayload = new FormData();
+    formPayload.append('file', form22File);
+
+    try {
+      const response = await fetch(`${API_URL}/form22/upload`, {
+        method: 'POST',
+        body: formPayload,
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setDbStatus({ type: 'success', message: data.message });
+        setForm22File(null);
+      } else {
+        throw new Error(data.error || "Upload failed");
+      }
+    } catch (error) {
+      console.error("DB Upload Error:", error);
+      setDbStatus({ type: 'error', message: "Upload failed. Check server logs." });
+    } finally {
+      setDbUploading(false);
+    }
+  };
 
   const handlePrint = useReactToPrint({
     contentRef: componentRef,
@@ -380,6 +421,45 @@ const SuzukiGatePass = ({ theme }) => {
             </div>
 
             <fieldset disabled={serverError} className="space-y-2">
+              {/* Database Update Section */}
+              <div className={`p-3 rounded-lg border mb-4 ${isDark ? 'bg-blue-900/10 border-blue-800/50' : 'bg-blue-50 border-blue-200'}`}>
+                <label className={labelClass}>Update Search Database (Form22)</label>
+                <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={handleFileUpload}
+                    className={`text-xs flex-1 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:cursor-pointer transition-colors ${
+                      isDark 
+                        ? 'text-gray-300 file:bg-blue-900/40 file:text-blue-400 hover:file:bg-blue-900/60' 
+                        : 'text-gray-600 file:bg-white file:text-blue-600 hover:file:bg-blue-50 border-gray-300'
+                    }`}
+                  />
+                  <button
+                    onClick={uploadToDatabase}
+                    disabled={!form22File || dbUploading}
+                    className={`px-3 py-1.5 rounded-md font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                      isDark 
+                        ? "bg-blue-600 hover:bg-blue-500 text-white disabled:bg-gray-700" 
+                        : "bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-300"
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    {dbUploading ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
+                    Upload
+                  </button>
+                </div>
+                {dbStatus && (
+                  <div className={`mt-2 text-[10px] p-2 rounded border flex items-center gap-1.5 ${
+                    dbStatus.type === 'success' 
+                      ? (isDark ? "bg-green-900/30 text-green-400 border-green-800" : "bg-green-50 text-green-700 border-green-200") 
+                      : (isDark ? "bg-red-900/30 text-red-400 border-red-800" : "bg-red-50 text-red-700 border-red-200")
+                  }`}>
+                    {dbStatus.type === 'success' && <CheckCircle size={12} />}
+                    {dbStatus.message}
+                  </div>
+                )}
+              </div>
+
               {/* Vehicle Search */}
               <div className="mb-3 relative z-30">
                 <label className={labelClass}>Vehicle Search (Chassis/Name)</label>

@@ -6,9 +6,7 @@ import {
   AlertCircle,
   Download,
   ChevronDown,
-  ChevronUp,
-  Database,
-  Loader2
+  ChevronUp
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -26,9 +24,6 @@ const VahanConverter = ({ theme }) => {
   const [vahanSheetName, setVahanSheetName] = useState("");
   const [form22SheetName, setForm22SheetName] = useState("");
 
-  const [dbUploading, setDbUploading] = useState(false);
-  const [dbStatus, setDbStatus] = useState(null);
-
   const isDark = theme === "dark";
 
   const handleFileUpload = (e, type) => {
@@ -36,40 +31,9 @@ const VahanConverter = ({ theme }) => {
     if (file) {
       if (type === "form22") {
         setForm22File(file);
-        setDbStatus(null);
       } else {
         setVahanFile(file);
       }
-    }
-  };
-
-  const uploadToDatabase = async () => {
-    if (!form22File) return;
-    
-    setDbUploading(true);
-    setDbStatus(null);
-
-    const formData = new FormData();
-    formData.append('file', form22File);
-
-    try {
-      const response = await fetch(`${API_URL}/form22/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-      
-      const data = await response.json();
-
-      if (response.ok) {
-        setDbStatus({ type: 'success', message: data.message });
-      } else {
-        throw new Error(data.error || "Upload failed");
-      }
-    } catch (error) {
-      console.error("DB Upload Error:", error);
-      setDbStatus({ type: 'error', message: "Upload failed. Check server logs." });
-    } finally {
-      setDbUploading(false);
     }
   };
 
@@ -357,7 +321,7 @@ const VahanConverter = ({ theme }) => {
             <label className={`block text-sm font-semibold mb-3 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
               FORM22 File
             </label>
-            <div className={`relative border-2 border-dashed rounded-xl p-6 mb-3 transition-all ${
+            <div className={`relative border-2 border-dashed rounded-xl p-6 transition-all ${
                 form22File ? (isDark ? "border-green-500 bg-green-500/10" : "border-green-500 bg-green-50") : (isDark ? "border-gray-600 hover:border-gray-500" : "border-gray-300 hover:border-gray-400")
               }`}>
               <input
@@ -372,39 +336,6 @@ const VahanConverter = ({ theme }) => {
                   {form22File ? form22File.name : "Click to upload"}
                 </p>
               </div>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={uploadToDatabase}
-                disabled={!form22File || dbUploading}
-                className={`w-full py-2 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-all ${
-                  isDark ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
-              >
-                {dbUploading ? (
-                  <>
-                    <Loader2 className="animate-spin" size={18} />
-                    Uploading to DB...
-                  </>
-                ) : (
-                  <>
-                    <Database size={18} />
-                    Upload to Search DB (GatePass)
-                  </>
-                )}
-              </button>
-
-              {dbStatus && (
-                <div className={`text-xs p-2 rounded text-center border ${
-                  dbStatus.type === 'success' 
-                    ? "bg-green-100 text-green-700 border-green-200" 
-                    : "bg-red-100 text-red-700 border-red-200"
-                }`}>
-                  {dbStatus.type === 'success' && <CheckCircle size={12} className="inline mr-1" />}
-                  {dbStatus.message}
-                </div>
-              )}
             </div>
           </div>
 
