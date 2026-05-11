@@ -15,6 +15,7 @@ import UserProfile from "./components/UserProfile";
 import AdminPanel from "./components/AdminPanel"; 
 import XmlGenerator from "./components/XmlGenerator";
 import Calculator from "./components/Calculator";
+import HSRPVahanMerger from "./components/HSRPVahanMerger";
 
 const originalFetch = window.fetch;
 window.fetch = async (...args) => {
@@ -191,6 +192,9 @@ function App() {
           </div>
           <div className={`absolute inset-0 overflow-y-auto ${activePage === "vahan" ? "block" : "hidden"}`}>
             <VahanConverter theme={theme} />
+          </div>
+          <div className={`absolute inset-0 overflow-y-auto ${activePage === "hsrp_vahan" ? "block" : "hidden"}`}>
+            <HSRPVahanMerger theme={theme} />
           </div>
           <div className={`absolute inset-0 overflow-y-auto ${activePage === "insurance" ? "block" : "hidden"}`}>
             <InsuranceProcessor theme={theme} />

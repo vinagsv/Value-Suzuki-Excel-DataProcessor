@@ -32,7 +32,8 @@ const CONFIG = {
         DATE: 'DATE',
         BILL_NUM: 'BC BILLS NO',
         MODE_OF_PAYMENT: 'MODE OF PAYMENT',
-        TAXABLE_AMOUNT: 'TAX AMT',
+        TAXABLE_AMOUNT_18: 'TAX @18',   
+        TAXABLE_AMOUNT_5: 'TAX @5',     
         LABOUR_CHARGES: 'LABOUR CHRGS',
         TOTAL: 'TOTAL',
         NARRATION: 'NARRATION'
@@ -47,7 +48,8 @@ const CONFIG = {
             "Credit Card/Scan QR-Paytm",
             "State Bank of India-Current Account No 339"
         ],
-        SALES: "Sales @ 18% GST Local",
+        SALES_18: "Sales @ 18% GST Local",
+        SALES_5: "Sales @ 5% Gst Local",     // 5% GST sales ledger
         CGST: "CGST OUTPUT",
         SGST: "SGST OUTPUT",
         ROUND_OFF: "Round Off",
@@ -57,7 +59,8 @@ const CONFIG = {
     // Cost Centre Configuration
     COST_CENTRE: {
         CATEGORY: "Primary Cost Category",
-        NAME: "Service"
+        NAME_SERVICE: "Service",   
+        NAME_SPARES: "Service"      
     },
 
     // Tax and HSN Information
@@ -65,6 +68,7 @@ const CONFIG = {
         SALES_HSN: "85319000",
         LABOUR_HSN: "998729",
         LABOUR_DESC: "Two Wheeler Servicing"
+        // Note: Sales @ 5% Gst Local has no HSN/source set on ledger entry
     }
 };
 
@@ -90,6 +94,7 @@ const getValidLedgerName = (mode) => {
 
 /**
  * Converts Excel data to Tally XML client-side for BC Bills.
+ * Now supports two taxable amount columns: TAX @18 and TAX @5.
  */
 export async function processBCFileClientSide(file, fromDateStr = null, toDateStr = null) {
     if (!file) {
@@ -112,17 +117,21 @@ export async function processBCFileClientSide(file, fromDateStr = null, toDateSt
 
     const headers = data[0].map(h => (h || '').toString().trim().toUpperCase());
     const colIdx = {
-        date: headers.indexOf(CONFIG.EXCEL_MAPPING.DATE.toUpperCase()),
-        billNum: headers.indexOf(CONFIG.EXCEL_MAPPING.BILL_NUM.toUpperCase()),
-        mode: headers.indexOf(CONFIG.EXCEL_MAPPING.MODE_OF_PAYMENT.toUpperCase()),
-        taxable: headers.indexOf(CONFIG.EXCEL_MAPPING.TAXABLE_AMOUNT.toUpperCase()),
-        labour: headers.indexOf(CONFIG.EXCEL_MAPPING.LABOUR_CHARGES.toUpperCase()),
-        total: headers.indexOf(CONFIG.EXCEL_MAPPING.TOTAL.toUpperCase()),
+        date:     headers.indexOf(CONFIG.EXCEL_MAPPING.DATE.toUpperCase()),
+        billNum:  headers.indexOf(CONFIG.EXCEL_MAPPING.BILL_NUM.toUpperCase()),
+        mode:     headers.indexOf(CONFIG.EXCEL_MAPPING.MODE_OF_PAYMENT.toUpperCase()),
+        taxable18: headers.indexOf(CONFIG.EXCEL_MAPPING.TAXABLE_AMOUNT_18.toUpperCase()),
+        taxable5:  headers.indexOf(CONFIG.EXCEL_MAPPING.TAXABLE_AMOUNT_5.toUpperCase()),
+        labour:   headers.indexOf(CONFIG.EXCEL_MAPPING.LABOUR_CHARGES.toUpperCase()),
+        total:    headers.indexOf(CONFIG.EXCEL_MAPPING.TOTAL.toUpperCase()),
         narration: headers.indexOf(CONFIG.EXCEL_MAPPING.NARRATION.toUpperCase())
     };
 
     if (colIdx.date === -1 || colIdx.billNum === -1) {
         throw new Error(`Could not find required '${CONFIG.EXCEL_MAPPING.DATE}' or '${CONFIG.EXCEL_MAPPING.BILL_NUM}' columns in the header.`);
+    }
+    if (colIdx.taxable18 === -1 && colIdx.taxable5 === -1) {
+        throw new Error(`Could not find '${CONFIG.EXCEL_MAPPING.TAXABLE_AMOUNT_18}' or '${CONFIG.EXCEL_MAPPING.TAXABLE_AMOUNT_5}' columns in the header.`);
     }
 
     let xml = `<ENVELOPE>\n`;
@@ -219,27 +228,30 @@ export async function processBCFileClientSide(file, fromDateStr = null, toDateSt
         lastValidSeq = currentSeq;
 
         const rawPaymentMode = (colIdx.mode !== -1) ? row[colIdx.mode] : '';
-        const rawSales = (colIdx.taxable !== -1) ? row[colIdx.taxable] : '';
-        const rawLabour = (colIdx.labour !== -1) ? row[colIdx.labour] : '';
-        const rawTotal = (colIdx.total !== -1) ? row[colIdx.total] : '';
+        const rawSales18 = (colIdx.taxable18 !== -1) ? row[colIdx.taxable18] : '';
+        const rawSales5  = (colIdx.taxable5  !== -1) ? row[colIdx.taxable5]  : '';
+        const rawLabour  = (colIdx.labour    !== -1) ? row[colIdx.labour]    : '';
+        const rawTotal   = (colIdx.total     !== -1) ? row[colIdx.total]     : '';
         const rawNarration = (colIdx.narration !== -1) ? (row[colIdx.narration] || '').toString().trim() : '';
 
         const finalNarration = rawNarration ? `Auto Imported from Excel ${rawNarration}` : `Auto Imported from Excel`;
         
-        const validLedger = getValidLedgerName(rawPaymentMode);
-        const isSalesInvalid = isInvalidNumber(rawSales);
+        const validLedger    = getValidLedgerName(rawPaymentMode);
         const isTotalInvalid = isInvalidNumber(rawTotal);
-        
-        const targetTotal = parseFloat(rawTotal) || 0;
-        const salesAmount = parseFloat(rawSales) || 0;
-        const labourAmount = isInvalidNumber(rawLabour) ? 0 : parseFloat(rawLabour);
-        const areBothAmountsZero = salesAmount === 0 && labourAmount === 0;
 
-        if (!validLedger || isSalesInvalid || isTotalInvalid || targetTotal <= 0 || areBothAmountsZero) {
+        const targetTotal   = parseFloat(rawTotal)   || 0;
+        const sales18Amount = isInvalidNumber(rawSales18) ? 0 : (parseFloat(rawSales18) || 0);
+        const sales5Amount  = isInvalidNumber(rawSales5)  ? 0 : (parseFloat(rawSales5)  || 0);
+        const labourAmount  = isInvalidNumber(rawLabour)  ? 0 : (parseFloat(rawLabour)  || 0);
+
+        // A bill is valid only if there is at least one taxable amount and a positive total
+        const allAmountsZero = sales18Amount === 0 && sales5Amount === 0 && labourAmount === 0;
+
+        if (!validLedger || isTotalInvalid || targetTotal <= 0 || allAmountsZero) {
             xml += buildCancelledXML(dateFormatted, rawBillNumber, "cancelled, auto imported from Excel");
             cancelledCount++;
         } else {
-            xml += buildNormalXML(dateFormatted, rawBillNumber, validLedger, salesAmount, labourAmount, targetTotal, finalNarration);
+            xml += buildNormalXML(dateFormatted, rawBillNumber, validLedger, sales18Amount, sales5Amount, labourAmount, targetTotal, finalNarration);
             createdCount++;
         }
     }
@@ -285,7 +297,6 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
     xml += `      <GUID>${uniqueGuid}</GUID>\n`;
     xml += `      <NARRATION>${narration}</NARRATION>\n`;
     xml += `      <ENTEREDBY>accounts</ENTEREDBY>\n`;
-    // Changed to Alter for cancelled entries
     xml += `      <OBJECTUPDATEACTION>Alter</OBJECTUPDATEACTION>\n`;
     xml += `      <VOUCHERTYPENAME>${CONFIG.VOUCHER.TYPE}</VOUCHERTYPENAME>\n`;
     xml += `      <GSTREGISTRATION TAXTYPE="GST" TAXREGISTRATION="${CONFIG.COMPANY.GSTIN}">${CONFIG.COMPANY.STATE} Registration</GSTREGISTRATION>\n`;
@@ -293,7 +304,6 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
     xml += `      <NUMBERINGSTYLE>Automatic (Manual Override)</NUMBERINGSTYLE>\n`;
     xml += `      <CSTFORMISSUETYPE>&#4; Not Applicable</CSTFORMISSUETYPE>\n`;
     xml += `      <CSTFORMRECVTYPE>&#4; Not Applicable</CSTFORMRECVTYPE>\n`;
-    // Persisted view required
     xml += `      <PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>\n`;
     xml += `      <VCHSTATUSTAXADJUSTMENT>Default</VCHSTATUSTAXADJUSTMENT>\n`;
     xml += `      <VCHSTATUSVOUCHERTYPE>${CONFIG.VOUCHER.TYPE}</VCHSTATUSVOUCHERTYPE>\n`;
@@ -427,7 +437,6 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
     xml += `      <CHANGEVCHMODE>No</CHANGEVCHMODE>\n`;
     xml += `      <RESETIRNQRCODE>No</RESETIRNQRCODE>\n`;
     xml += `      <VOUCHERNUMBERSERIES>Default</VOUCHERNUMBERSERIES>\n`;
-    // Empty list closures must be present even for cancelled bills
     xml += `      <EWAYBILLDETAILS.LIST>      </EWAYBILLDETAILS.LIST>\n`;
     xml += `      <EXCLUDEDTAXATIONS.LIST>      </EXCLUDEDTAXATIONS.LIST>\n`;
     xml += `      <OLDAUDITENTRIES.LIST>      </OLDAUDITENTRIES.LIST>\n`;
@@ -463,25 +472,37 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
     return xml;
 }
 
-function buildNormalXML(dateFormatted, billNumber, paymentMode, salesAmount, labourAmount, targetTotal, narration) {
+/**
+ * Builds a normal (non-cancelled) voucher XML.
+ *
+ * Tax computation:
+ *   CGST = (sales18 * 9%) + (sales5 * 2.5%) + (labour * 9%)
+ *   SGST = same as CGST
+ */
+function buildNormalXML(dateFormatted, billNumber, paymentMode, sales18TaxAmount, sales5TaxAmount, labourAmount, targetTotal, narration) {
     const uniqueGuid = window.crypto.randomUUID();
-    let totalCgst = 0;
-    let totalSgst = 0;
 
-    if (salesAmount > 0) {
-        totalCgst += Math.round((salesAmount * 0.09) * 100) / 100;
-        totalSgst += Math.round((salesAmount * 0.09) * 100) / 100;
-    }
-    if (labourAmount > 0) {
-        totalCgst += Math.round((labourAmount * 0.09) * 100) / 100;
-        totalSgst += Math.round((labourAmount * 0.09) * 100) / 100;
-    }
+    // --- Tax calculation ---
+    // Excel columns contain the tax amount (9% for @18, 2.5% for @5), not the taxable value
+    // Back-calculate the taxable base, then CGST = SGST = the original tax column value
+    const sales18Amount  = Math.round((sales18TaxAmount / 0.09)  * 100) / 100;  // taxable base for 18%
+    const sales5Amount   = Math.round((sales5TaxAmount  / 0.025) * 100) / 100;  // taxable base for 5%
 
-    const calculatedTotal = salesAmount + labourAmount + totalCgst + totalSgst;
+    const cgst18    = sales18TaxAmount;   // already the 9% amount
+    const sgst18    = sales18TaxAmount;
+    const cgst5     = sales5TaxAmount;    // already the 2.5% amount
+    const sgst5     = sales5TaxAmount;
+    const cgstLabour = Math.round((labourAmount * 0.09) * 100) / 100;
+    const sgstLabour = Math.round((labourAmount * 0.09) * 100) / 100;
+
+    const totalCgst = Math.round((cgst18 + cgst5 + cgstLabour) * 100) / 100;
+    const totalSgst = Math.round((sgst18 + sgst5 + sgstLabour) * 100) / 100;
+
+    const calculatedTotal = sales18Amount + sales5Amount + labourAmount + totalCgst + totalSgst;
     const roundOff = Math.round((targetTotal - calculatedTotal) * 100) / 100;
-    
-    const roundOffIsDeemedPositive = 'No';
-    const roundOffAmountStr = roundOff.toFixed(2); 
+    const roundOffAmountStr = roundOff.toFixed(2);
+
+    //XML construction
 
     let xml = `    <TALLYMESSAGE xmlns:UDF="TallyUDF">\n`;
     xml += `     <VOUCHER REMOTEID="${uniqueGuid}" VCHTYPE="${CONFIG.VOUCHER.TYPE}" ACTION="Create" OBJVIEW="Invoice Voucher View">\n`;
@@ -672,7 +693,7 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, salesAmount, lab
     xml += `      <ORIGINVOICEDETAILS.LIST>      </ORIGINVOICEDETAILS.LIST>\n`;
     xml += `      <INVOICEEXPORTLIST.LIST>      </INVOICEEXPORTLIST.LIST>\n`;
 
-    // 1. PARTY LEDGER (Mode of Payment)
+    // ── 1. PARTY LEDGER (Mode of Payment) ──────────────────────────────────────
     xml += `      <LEDGERENTRIES.LIST>\n`;
     xml += `       <OLDAUDITENTRYIDS.LIST TYPE="Number">\n`;
     xml += `        <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>\n`;
@@ -720,24 +741,23 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, salesAmount, lab
     xml += `       <TAXTYPEALLOCATIONS.LIST>       </TAXTYPEALLOCATIONS.LIST>\n`;
     xml += `      </LEDGERENTRIES.LIST>\n`;
 
-    // 2. SALES LEDGER
-    if (salesAmount > 0) {
+    // ── 2. SALES @ 18% GST LEDGER ──────────────────────────────────────────────
+    if (sales18Amount > 0) {
         xml += `      <LEDGERENTRIES.LIST>\n`;
         xml += `       <OLDAUDITENTRYIDS.LIST TYPE="Number">\n`;
         xml += `        <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>\n`;
         xml += `       </OLDAUDITENTRYIDS.LIST>\n`;
         xml += `       <ROUNDTYPE>&#4; Not Applicable</ROUNDTYPE>\n`;
-        xml += `       <LEDGERNAME>${CONFIG.LEDGERS.SALES}</LEDGERNAME>\n`;
+        xml += `       <LEDGERNAME>${CONFIG.LEDGERS.SALES_18}</LEDGERNAME>\n`;
         xml += `       <METHODTYPE>On Total Sales</METHODTYPE>\n`;
         xml += `       <GSTCLASS>&#4; Not Applicable</GSTCLASS>\n`;
-        // Added the missing GSTOVRDNINELIGIBLEITC tag here
         xml += `       <GSTOVRDNINELIGIBLEITC>&#4; Applicable</GSTOVRDNINELIGIBLEITC>\n`;
         xml += `       <GSTOVRDNISREVCHARGEAPPL>&#4; Not Applicable</GSTOVRDNISREVCHARGEAPPL>\n`;
         xml += `       <GSTOVRDNTAXABILITY>Taxable</GSTOVRDNTAXABILITY>\n`;
         xml += `       <GSTSOURCETYPE>Ledger</GSTSOURCETYPE>\n`;
-        xml += `       <GSTLEDGERSOURCE>${CONFIG.LEDGERS.SALES}</GSTLEDGERSOURCE>\n`;
+        xml += `       <GSTLEDGERSOURCE>${CONFIG.LEDGERS.SALES_18}</GSTLEDGERSOURCE>\n`;
         xml += `       <HSNSOURCETYPE>Ledger</HSNSOURCETYPE>\n`;
-        xml += `       <HSNLEDGERSOURCE>${CONFIG.LEDGERS.SALES}</HSNLEDGERSOURCE>\n`;
+        xml += `       <HSNLEDGERSOURCE>${CONFIG.LEDGERS.SALES_18}</HSNLEDGERSOURCE>\n`;
         xml += `       <GSTOVRDNSTOREDNATURE>Local Sales - Taxable</GSTOVRDNSTOREDNATURE>\n`;
         xml += `       <GSTOVRDNTYPEOFSUPPLY>Goods</GSTOVRDNTYPEOFSUPPLY>\n`;
         xml += `       <GSTRATEINFERAPPLICABILITY>As per Masters/Company</GSTRATEINFERAPPLICABILITY>\n`;
@@ -756,15 +776,15 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, salesAmount, lab
         xml += `       <ISLASTDEEMEDPOSITIVE>No</ISLASTDEEMEDPOSITIVE>\n`;
         xml += `       <ISCAPVATTAXALTERED>No</ISCAPVATTAXALTERED>\n`;
         xml += `       <ISCAPVATNOTCLAIMED>No</ISCAPVATNOTCLAIMED>\n`;
-        xml += `       <AMOUNT>${salesAmount.toFixed(2)}</AMOUNT>\n`;
-        xml += `       <VATEXPAMOUNT>${salesAmount.toFixed(2)}</VATEXPAMOUNT>\n`;
+        xml += `       <AMOUNT>${sales18Amount.toFixed(2)}</AMOUNT>\n`;
+        xml += `       <VATEXPAMOUNT>${sales18Amount.toFixed(2)}</VATEXPAMOUNT>\n`;
         xml += `       <SERVICETAXDETAILS.LIST>       </SERVICETAXDETAILS.LIST>\n`;
         xml += `       <CATEGORYALLOCATIONS.LIST>\n`;
         xml += `        <CATEGORY>${CONFIG.COST_CENTRE.CATEGORY}</CATEGORY>\n`;
         xml += `        <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>\n`;
         xml += `        <COSTCENTREALLOCATIONS.LIST>\n`;
-        xml += `         <NAME>${CONFIG.COST_CENTRE.NAME}</NAME>\n`;
-        xml += `         <AMOUNT>${salesAmount.toFixed(2)}</AMOUNT>\n`;
+        xml += `         <NAME>${CONFIG.COST_CENTRE.NAME_SERVICE}</NAME>\n`;
+        xml += `         <AMOUNT>${sales18Amount.toFixed(2)}</AMOUNT>\n`;
         xml += `        </COSTCENTREALLOCATIONS.LIST>\n`;
         xml += `       </CATEGORYALLOCATIONS.LIST>\n`;
         xml += `       <BANKALLOCATIONS.LIST>       </BANKALLOCATIONS.LIST>\n`;
@@ -816,7 +836,101 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, salesAmount, lab
         xml += `      </LEDGERENTRIES.LIST>\n`;
     }
 
-    // 3. LABOUR CHARGES
+    // ── 3. SALES @ 5% GST LEDGER ───────────────────────────────────────────────
+    // Note: per reference XML, this ledger has NO GSTHSNNAME / HSNLEDGERSOURCE,
+    // and the cost centre is "Spares" (not "Service").
+    if (sales5Amount > 0) {
+        xml += `      <LEDGERENTRIES.LIST>\n`;
+        xml += `       <OLDAUDITENTRYIDS.LIST TYPE="Number">\n`;
+        xml += `        <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>\n`;
+        xml += `       </OLDAUDITENTRYIDS.LIST>\n`;
+        xml += `       <ROUNDTYPE>&#4; Not Applicable</ROUNDTYPE>\n`;
+        xml += `       <LEDGERNAME>${CONFIG.LEDGERS.SALES_5}</LEDGERNAME>\n`;
+        xml += `       <METHODTYPE>On Total Sales</METHODTYPE>\n`;
+        xml += `       <GSTCLASS>&#4; Not Applicable</GSTCLASS>\n`;
+        xml += `       <GSTOVRDNINELIGIBLEITC>&#4; Applicable</GSTOVRDNINELIGIBLEITC>\n`;
+        xml += `       <GSTOVRDNISREVCHARGEAPPL>&#4; Not Applicable</GSTOVRDNISREVCHARGEAPPL>\n`;
+        xml += `       <GSTOVRDNTAXABILITY>Taxable</GSTOVRDNTAXABILITY>\n`;
+        xml += `       <GSTSOURCETYPE>Ledger</GSTSOURCETYPE>\n`;
+        xml += `       <GSTLEDGERSOURCE>${CONFIG.LEDGERS.SALES_5}</GSTLEDGERSOURCE>\n`;
+        xml += `       <GSTOVRDNSTOREDNATURE>Local Sales - Taxable</GSTOVRDNSTOREDNATURE>\n`;
+        xml += `       <GSTOVRDNTYPEOFSUPPLY>Goods</GSTOVRDNTYPEOFSUPPLY>\n`;
+        xml += `       <GSTRATEINFERAPPLICABILITY>As per Masters/Company</GSTRATEINFERAPPLICABILITY>\n`;
+        xml += `       <GSTHSNINFERAPPLICABILITY>As per Masters/Company</GSTHSNINFERAPPLICABILITY>\n`;
+        xml += `       <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>\n`;
+        xml += `       <LEDGERFROMITEM>No</LEDGERFROMITEM>\n`;
+        xml += `       <REMOVEZEROENTRIES>Yes</REMOVEZEROENTRIES>\n`;
+        xml += `       <ISPARTYLEDGER>No</ISPARTYLEDGER>\n`;
+        xml += `       <GSTOVERRIDDEN>No</GSTOVERRIDDEN>\n`;
+        xml += `       <ISGSTASSESSABLEVALUEOVERRIDDEN>No</ISGSTASSESSABLEVALUEOVERRIDDEN>\n`;
+        xml += `       <STRDISGSTAPPLICABLE>No</STRDISGSTAPPLICABLE>\n`;
+        xml += `       <STRDGSTISPARTYLEDGER>No</STRDGSTISPARTYLEDGER>\n`;
+        xml += `       <STRDGSTISDUTYLEDGER>No</STRDGSTISDUTYLEDGER>\n`;
+        xml += `       <CONTENTNEGISPOS>No</CONTENTNEGISPOS>\n`;
+        xml += `       <ISLASTDEEMEDPOSITIVE>No</ISLASTDEEMEDPOSITIVE>\n`;
+        xml += `       <ISCAPVATTAXALTERED>No</ISCAPVATTAXALTERED>\n`;
+        xml += `       <ISCAPVATNOTCLAIMED>No</ISCAPVATNOTCLAIMED>\n`;
+        xml += `       <AMOUNT>${sales5Amount.toFixed(2)}</AMOUNT>\n`;
+        xml += `       <VATEXPAMOUNT>${sales5Amount.toFixed(2)}</VATEXPAMOUNT>\n`;
+        xml += `       <SERVICETAXDETAILS.LIST>       </SERVICETAXDETAILS.LIST>\n`;
+        xml += `       <CATEGORYALLOCATIONS.LIST>\n`;
+        xml += `        <CATEGORY>${CONFIG.COST_CENTRE.CATEGORY}</CATEGORY>\n`;
+        xml += `        <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>\n`;
+        xml += `        <COSTCENTREALLOCATIONS.LIST>\n`;
+        xml += `         <NAME>${CONFIG.COST_CENTRE.NAME_SPARES}</NAME>\n`;
+        xml += `         <AMOUNT>${sales5Amount.toFixed(2)}</AMOUNT>\n`;
+        xml += `        </COSTCENTREALLOCATIONS.LIST>\n`;
+        xml += `       </CATEGORYALLOCATIONS.LIST>\n`;
+        xml += `       <BANKALLOCATIONS.LIST>       </BANKALLOCATIONS.LIST>\n`;
+        xml += `       <BILLALLOCATIONS.LIST>       </BILLALLOCATIONS.LIST>\n`;
+        xml += `       <INTERESTCOLLECTION.LIST>       </INTERESTCOLLECTION.LIST>\n`;
+        xml += `       <OLDAUDITENTRIES.LIST>       </OLDAUDITENTRIES.LIST>\n`;
+        xml += `       <ACCOUNTAUDITENTRIES.LIST>       </ACCOUNTAUDITENTRIES.LIST>\n`;
+        xml += `       <AUDITENTRIES.LIST>       </AUDITENTRIES.LIST>\n`;
+        xml += `       <INPUTCRALLOCS.LIST>       </INPUTCRALLOCS.LIST>\n`;
+        xml += `       <DUTYHEADDETAILS.LIST>       </DUTYHEADDETAILS.LIST>\n`;
+        xml += `       <EXCISEDUTYHEADDETAILS.LIST>       </EXCISEDUTYHEADDETAILS.LIST>\n`;
+        xml += `       <RATEDETAILS.LIST>\n`;
+        xml += `        <GSTRATEDUTYHEAD>CGST</GSTRATEDUTYHEAD>\n`;
+        xml += `        <GSTRATEVALUATIONTYPE>Based on Value</GSTRATEVALUATIONTYPE>\n`;
+        xml += `        <GSTRATE> 2.50</GSTRATE>\n`;
+        xml += `       </RATEDETAILS.LIST>\n`;
+        xml += `       <RATEDETAILS.LIST>\n`;
+        xml += `        <GSTRATEDUTYHEAD>SGST/UTGST</GSTRATEDUTYHEAD>\n`;
+        xml += `        <GSTRATEVALUATIONTYPE>Based on Value</GSTRATEVALUATIONTYPE>\n`;
+        xml += `        <GSTRATE> 2.50</GSTRATE>\n`;
+        xml += `       </RATEDETAILS.LIST>\n`;
+        xml += `       <RATEDETAILS.LIST>\n`;
+        xml += `        <GSTRATEDUTYHEAD>IGST</GSTRATEDUTYHEAD>\n`;
+        xml += `        <GSTRATEVALUATIONTYPE>Based on Value</GSTRATEVALUATIONTYPE>\n`;
+        xml += `        <GSTRATE> 5</GSTRATE>\n`;
+        xml += `       </RATEDETAILS.LIST>\n`;
+        xml += `       <RATEDETAILS.LIST>\n`;
+        xml += `        <GSTRATEDUTYHEAD>Cess</GSTRATEDUTYHEAD>\n`;
+        xml += `        <GSTRATEVALUATIONTYPE>&#4; Not Applicable</GSTRATEVALUATIONTYPE>\n`;
+        xml += `       </RATEDETAILS.LIST>\n`;
+        xml += `       <RATEDETAILS.LIST>\n`;
+        xml += `        <GSTRATEDUTYHEAD>State Cess</GSTRATEDUTYHEAD>\n`;
+        xml += `        <GSTRATEVALUATIONTYPE>Based on Value</GSTRATEVALUATIONTYPE>\n`;
+        xml += `       </RATEDETAILS.LIST>\n`;
+        xml += `       <SUMMARYALLOCS.LIST>       </SUMMARYALLOCS.LIST>\n`;
+        xml += `       <CENVATDUTYALLOCATIONS.LIST>       </CENVATDUTYALLOCATIONS.LIST>\n`;
+        xml += `       <STPYMTDETAILS.LIST>       </STPYMTDETAILS.LIST>\n`;
+        xml += `       <EXCISEPAYMENTALLOCATIONS.LIST>       </EXCISEPAYMENTALLOCATIONS.LIST>\n`;
+        xml += `       <TAXBILLALLOCATIONS.LIST>       </TAXBILLALLOCATIONS.LIST>\n`;
+        xml += `       <TAXOBJECTALLOCATIONS.LIST>       </TAXOBJECTALLOCATIONS.LIST>\n`;
+        xml += `       <TDSEXPENSEALLOCATIONS.LIST>       </TDSEXPENSEALLOCATIONS.LIST>\n`;
+        xml += `       <VATSTATUTORYDETAILS.LIST>       </VATSTATUTORYDETAILS.LIST>\n`;
+        xml += `       <COSTTRACKALLOCATIONS.LIST>       </COSTTRACKALLOCATIONS.LIST>\n`;
+        xml += `       <REFVOUCHERDETAILS.LIST>       </REFVOUCHERDETAILS.LIST>\n`;
+        xml += `       <INVOICEWISEDETAILS.LIST>       </INVOICEWISEDETAILS.LIST>\n`;
+        xml += `       <VATITCDETAILS.LIST>       </VATITCDETAILS.LIST>\n`;
+        xml += `       <ADVANCETAXDETAILS.LIST>       </ADVANCETAXDETAILS.LIST>\n`;
+        xml += `       <TAXTYPEALLOCATIONS.LIST>       </TAXTYPEALLOCATIONS.LIST>\n`;
+        xml += `      </LEDGERENTRIES.LIST>\n`;
+    }
+
+    // ── 4. LABOUR CHARGES ──────────────────────────────────────────────────────
     if (labourAmount > 0) {
         xml += `      <LEDGERENTRIES.LIST>\n`;
         xml += `       <OLDAUDITENTRYIDS.LIST TYPE="Number">\n`;
@@ -826,8 +940,6 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, salesAmount, lab
         xml += `       <LEDGERNAME>${CONFIG.LEDGERS.LABOUR}</LEDGERNAME>\n`;
         xml += `       <METHODTYPE>On Total Sales</METHODTYPE>\n`;
         xml += `       <GSTCLASS>&#4; Not Applicable</GSTCLASS>\n`;
-        // Added the missing GSTOVRDNINELIGIBLEITC tag here
-        xml += `       <GSTOVRDNINELIGIBLEITC>&#4; Applicable</GSTOVRDNINELIGIBLEITC>\n`;
         xml += `       <GSTOVRDNISREVCHARGEAPPL>&#4; Not Applicable</GSTOVRDNISREVCHARGEAPPL>\n`;
         xml += `       <GSTOVRDNTAXABILITY>Taxable</GSTOVRDNTAXABILITY>\n`;
         xml += `       <GSTSOURCETYPE>Ledger</GSTSOURCETYPE>\n`;
@@ -862,7 +974,7 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, salesAmount, lab
         xml += `        <CATEGORY>${CONFIG.COST_CENTRE.CATEGORY}</CATEGORY>\n`;
         xml += `        <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>\n`;
         xml += `        <COSTCENTREALLOCATIONS.LIST>\n`;
-        xml += `         <NAME>${CONFIG.COST_CENTRE.NAME}</NAME>\n`;
+        xml += `         <NAME>${CONFIG.COST_CENTRE.NAME_SERVICE}</NAME>\n`;
         xml += `         <AMOUNT>${labourAmount.toFixed(2)}</AMOUNT>\n`;
         xml += `        </COSTCENTREALLOCATIONS.LIST>\n`;
         xml += `       </CATEGORYALLOCATIONS.LIST>\n`;
@@ -915,7 +1027,7 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, salesAmount, lab
         xml += `      </LEDGERENTRIES.LIST>\n`;
     }
 
-    // 4. CGST
+    // ── 5. CGST ────────────────────────────────────────────────────────────────
     xml += `      <LEDGERENTRIES.LIST>\n`;
     xml += `       <OLDAUDITENTRYIDS.LIST TYPE="Number">\n`;
     xml += `        <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>\n`;
@@ -966,7 +1078,7 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, salesAmount, lab
     xml += `       <TAXTYPEALLOCATIONS.LIST>       </TAXTYPEALLOCATIONS.LIST>\n`;
     xml += `      </LEDGERENTRIES.LIST>\n`;
 
-    // 5. SGST
+    // ── 6. SGST ────────────────────────────────────────────────────────────────
     xml += `      <LEDGERENTRIES.LIST>\n`;
     xml += `       <OLDAUDITENTRYIDS.LIST TYPE="Number">\n`;
     xml += `        <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>\n`;
@@ -1017,7 +1129,7 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, salesAmount, lab
     xml += `       <TAXTYPEALLOCATIONS.LIST>       </TAXTYPEALLOCATIONS.LIST>\n`;
     xml += `      </LEDGERENTRIES.LIST>\n`;
 
-    // 6. ROUND OFF
+    // ── 7. ROUND OFF (only if ≥ 0.01) ─────────────────────────────────────────
     if (Math.abs(roundOff) >= 0.01) {
         xml += `      <LEDGERENTRIES.LIST>\n`;
         xml += `       <OLDAUDITENTRYIDS.LIST TYPE="Number">\n`;
@@ -1027,7 +1139,7 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, salesAmount, lab
         xml += `       <LEDGERNAME>${CONFIG.LEDGERS.ROUND_OFF}</LEDGERNAME>\n`;
         xml += `       <METHODTYPE>As Total Amount Rounding</METHODTYPE>\n`;
         xml += `       <GSTCLASS>&#4; Not Applicable</GSTCLASS>\n`;
-        xml += `       <ISDEEMEDPOSITIVE>${roundOffIsDeemedPositive}</ISDEEMEDPOSITIVE>\n`;
+        xml += `       <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>\n`;
         xml += `       <LEDGERFROMITEM>No</LEDGERFROMITEM>\n`;
         xml += `       <REMOVEZEROENTRIES>Yes</REMOVEZEROENTRIES>\n`;
         xml += `       <ISPARTYLEDGER>No</ISPARTYLEDGER>\n`;
@@ -1071,7 +1183,7 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, salesAmount, lab
         xml += `      </LEDGERENTRIES.LIST>\n`;
     }
 
-    // Tally Lists closings
+    // ── Closing GST and other lists ────────────────────────────────────────────
     xml += `      <GST.LIST>\n`;
     xml += `       <PURPOSETYPE>GST</PURPOSETYPE>\n`;
     xml += `       <STAT.LIST>\n`;

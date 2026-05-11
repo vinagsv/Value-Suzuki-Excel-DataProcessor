@@ -98,9 +98,9 @@ const NavbarStyle = () => (
     .nb-nav-scroll {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 2px;
       overflow-x: auto;
-      padding: 0 10px;
+      padding: 0 8px;
       scroll-behavior: smooth;
       -ms-overflow-style: none;
       scrollbar-width: none;
@@ -128,7 +128,7 @@ const NavbarStyle = () => (
       position: absolute;
       top: 50%; transform: translateY(-50%);
       z-index: 5;
-      width: 26px; height: 26px;
+      width: 24px; height: 24px;
       border-radius: 6px;
       border: 1px solid;
       background: none;
@@ -148,14 +148,14 @@ const NavbarStyle = () => (
     .nb-item {
       display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 8px 16px;
-      border-radius: 8px;
+      gap: 4px;
+      padding: 6px 10px;
+      border-radius: 6px;
       border: 1px solid transparent;
       font-family: 'Syne', sans-serif;
-      font-size: 14px;
+      font-size: 12px;
       font-weight: 700;
-      letter-spacing: 0.3px;
+      letter-spacing: 0.2px;
       white-space: nowrap;
       cursor: pointer;
       background: none;
@@ -363,6 +363,7 @@ const pages = [
   { id: "gatepass",  name: "Gate Pass"},
   { id: "dp_receipt",name: "DP Receipt" },
   { id: "vahan",     name: "VAHAN"},
+  { id: "hsrp_vahan",name: "HSRP NO"},
   { id: "insurance", name: "Insurance"},
   { id: "dms",       name: "DMS Names"},
   { id: "tally",     name: "TALLY"},
