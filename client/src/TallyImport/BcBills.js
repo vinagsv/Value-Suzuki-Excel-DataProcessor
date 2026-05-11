@@ -60,7 +60,7 @@ const CONFIG = {
     COST_CENTRE: {
         CATEGORY: "Primary Cost Category",
         NAME_SERVICE: "Service",   
-        NAME_SPARES: "Service"      
+        NAME_SPARES: "Spares"      
     },
 
     // Tax and HSN Information
@@ -221,7 +221,7 @@ export async function processBCFileClientSide(file, fromDateStr = null, toDateSt
         if (lastValidSeq !== null && currentSeq > lastValidSeq + 1) {
             for (let missingSeq = lastValidSeq + 1; missingSeq < currentSeq; missingSeq++) {
                 const missingBillNumber = `1/BC/${String(missingSeq).padStart(8, '0')}`;
-                xml += buildCancelledXML(dateFormatted, missingBillNumber, "Auto Imported from Excel - Missing Number Cancelled");
+                xml += buildCancelledXML(dateFormatted, missingBillNumber, "Auto Imported From Excel - Missing Number Cancelled");
                 cancelledCount++;
             }
         }
@@ -234,7 +234,7 @@ export async function processBCFileClientSide(file, fromDateStr = null, toDateSt
         const rawTotal   = (colIdx.total     !== -1) ? row[colIdx.total]     : '';
         const rawNarration = (colIdx.narration !== -1) ? (row[colIdx.narration] || '').toString().trim() : '';
 
-        const finalNarration = rawNarration ? `Auto Imported from Excel ${rawNarration}` : `Auto Imported from Excel`;
+        const finalNarration = rawNarration ? `Auto Imported from Excel ${rawNarration}` : `Auto Imported From Excel`;
         
         const validLedger    = getValidLedgerName(rawPaymentMode);
         const isTotalInvalid = isInvalidNumber(rawTotal);
@@ -476,8 +476,8 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
  * Builds a normal (non-cancelled) voucher XML.
  *
  * Tax computation:
- *   CGST = (sales18 * 9%) + (sales5 * 2.5%) + (labour * 9%)
- *   SGST = same as CGST
+ * CGST = (sales18 * 9%) + (sales5 * 2.5%) + (labour * 9%)
+ * SGST = same as CGST
  */
 function buildNormalXML(dateFormatted, billNumber, paymentMode, sales18TaxAmount, sales5TaxAmount, labourAmount, targetTotal, narration) {
     const uniqueGuid = window.crypto.randomUUID();
@@ -521,7 +521,7 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, sales18TaxAmount
     xml += `      <COUNTRYOFRESIDENCE>${CONFIG.COMPANY.COUNTRY}</COUNTRYOFRESIDENCE>\n`;
     xml += `      <PLACEOFSUPPLY>${CONFIG.COMPANY.STATE}</PLACEOFSUPPLY>\n`;
     xml += `      <VOUCHERTYPENAME>${CONFIG.VOUCHER.TYPE}</VOUCHERTYPENAME>\n`;
-    xml += `      <CLASSNAME>Default Voucher Class</CLASSNAME>\n`;
+    xml += `      <CLASSNAME>Default&#5;Voucher&#5;Class</CLASSNAME>\n`;
     xml += `      <PARTYNAME>${paymentMode}</PARTYNAME>\n`;
     xml += `      <GSTREGISTRATION TAXTYPE="GST" TAXREGISTRATION="${CONFIG.COMPANY.GSTIN}">${CONFIG.COMPANY.STATE} Registration</GSTREGISTRATION>\n`;
     xml += `      <CMPGSTIN>${CONFIG.COMPANY.GSTIN}</CMPGSTIN>\n`;
@@ -619,8 +619,8 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, sales18TaxAmount
     xml += `      <OVRDNEWAYBILLAPPLICABILITY>No</OVRDNEWAYBILLAPPLICABILITY>\n`;
     xml += `      <ISVATPRINCIPALACCOUNT>No</ISVATPRINCIPALACCOUNT>\n`;
     xml += `      <VCHSTATUSISVCHNUMUSED>No</VCHSTATUSISVCHNUMUSED>\n`;
-    xml += `      <VCHGSTSTATUSISINCLUDED>Yes</VCHGSTSTATUSISINCLUDED>\n`;
-    xml += `      <VCHGSTSTATUSISUNCERTAIN>No</VCHGSTSTATUSISUNCERTAIN>\n`;
+    xml += `      <VCHGSTSTATUSISINCLUDED>No</VCHGSTSTATUSISINCLUDED>\n`;
+    xml += `      <VCHGSTSTATUSISUNCERTAIN>Yes</VCHGSTSTATUSISUNCERTAIN>\n`;
     xml += `      <VCHGSTSTATUSISEXCLUDED>No</VCHGSTSTATUSISEXCLUDED>\n`;
     xml += `      <VCHGSTSTATUSISAPPLICABLE>Yes</VCHGSTSTATUSISAPPLICABLE>\n`;
     xml += `      <VCHGSTSTATUSISGSTR2BRECONCILED>No</VCHGSTSTATUSISGSTR2BRECONCILED>\n`;
@@ -838,7 +838,6 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, sales18TaxAmount
 
     // ── 3. SALES @ 5% GST LEDGER ───────────────────────────────────────────────
     // Note: per reference XML, this ledger has NO GSTHSNNAME / HSNLEDGERSOURCE,
-    // and the cost centre is "Spares" (not "Service").
     if (sales5Amount > 0) {
         xml += `      <LEDGERENTRIES.LIST>\n`;
         xml += `       <OLDAUDITENTRYIDS.LIST TYPE="Number">\n`;
@@ -970,14 +969,6 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, sales18TaxAmount
         xml += `       <AMOUNT>${labourAmount.toFixed(2)}</AMOUNT>\n`;
         xml += `       <VATEXPAMOUNT>${labourAmount.toFixed(2)}</VATEXPAMOUNT>\n`;
         xml += `       <SERVICETAXDETAILS.LIST>       </SERVICETAXDETAILS.LIST>\n`;
-        xml += `       <CATEGORYALLOCATIONS.LIST>\n`;
-        xml += `        <CATEGORY>${CONFIG.COST_CENTRE.CATEGORY}</CATEGORY>\n`;
-        xml += `        <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>\n`;
-        xml += `        <COSTCENTREALLOCATIONS.LIST>\n`;
-        xml += `         <NAME>${CONFIG.COST_CENTRE.NAME_SERVICE}</NAME>\n`;
-        xml += `         <AMOUNT>${labourAmount.toFixed(2)}</AMOUNT>\n`;
-        xml += `        </COSTCENTREALLOCATIONS.LIST>\n`;
-        xml += `       </CATEGORYALLOCATIONS.LIST>\n`;
         xml += `       <BANKALLOCATIONS.LIST>       </BANKALLOCATIONS.LIST>\n`;
         xml += `       <BILLALLOCATIONS.LIST>       </BILLALLOCATIONS.LIST>\n`;
         xml += `       <INTERESTCOLLECTION.LIST>       </INTERESTCOLLECTION.LIST>\n`;
