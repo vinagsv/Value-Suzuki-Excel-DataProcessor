@@ -479,7 +479,7 @@ const AttendanceProvider = ({ children, theme }) => {
   };
 
   // Detailed report for individual employees
-  const printReports = (employeesToPrint) => {
+ const printReports = (employeesToPrint) => {
     if (!employeesToPrint || employeesToPrint.length === 0) return;
 
     const printWindow = window.open("", "_blank");
@@ -489,108 +489,222 @@ const AttendanceProvider = ({ children, theme }) => {
       <head>
         <title>Attendance Report - ${month} ${year}</title>
         <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; color: #333; }
-          .page-break { page-break-after: always; }
-          .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #ddd; padding-bottom: 10px; }
-          h1 { margin: 0 0 5px 0; font-size: 24px; color: #2c3e50; }
-          .emp-info { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 14px; }
-          .emp-info div { flex: 1; }
-          .stats-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
-          .stat-box { border: 1px solid #e2e8f0; padding: 10px 15px; border-radius: 6px; background: #f8fafc; font-size: 13px; flex: 1; min-width: 100px; text-align: center; }
-          .stat-box strong { display: block; font-size: 16px; color: #0f172a; margin-top: 4px; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
-          th, td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; }
-          th { background-color: #f1f5f9; font-weight: 600; }
-          .sunday { background-color: #fef9c3; }
-          .status-p { color: #166534; font-weight: bold; }
-          .status-a { color: #991b1b; font-weight: bold; }
-          .status-hlf { color: #854d0e; font-weight: bold; }
+          @page { size: A4 portrait; margin: 10mm 10mm 10mm 10mm; }
+          * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          html, body {
+            margin: 0; padding: 0;
+            height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #000;
+            font-size: 9.5px;
+          }
+          .page {
+            width: 100%;
+            height: 277mm;
+            display: flex;
+            flex-direction: column;
+            page-break-after: always;
+          }
+          .page:last-child { page-break-after: auto; }
+
+          .header {
+            text-align: center;
+            border-bottom: 2px solid #1e293b;
+            padding-bottom: 5px;
+            margin-bottom: 6px;
+            flex-shrink: 0;
+          }
+          .header h1 { margin: 0; font-size: 15px; color: #000; letter-spacing: 0.5px; font-weight: 800; }
+          .header .period { font-size: 10px; color: #1e293b; margin-top: 1px; font-weight: 600; }
+
+          .emp-info {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 6px;
+            font-size: 8.5px;
+            background: #f1f5f9;
+            border: 1px solid #94a3b8;
+            border-radius: 5px;
+            padding: 5px 8px;
+            flex-shrink: 0;
+          }
+          .emp-info span { color: #1e293b; font-weight: 500; }
+          .emp-info strong { color: #000; font-weight: 700; }
+
+          .stats-grid {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 7px;
+            flex-shrink: 0;
+          }
+          .stat-box {
+            flex: 1;
+            border: 1px solid #94a3b8;
+            border-radius: 5px;
+            background: #f1f5f9;
+            padding: 5px 4px;
+            text-align: center;
+          }
+          .stat-box .label { font-size: 7.5px; color: #1e293b; line-height: 1.2; font-weight: 600; }
+          .stat-box .value { font-size: 14px; font-weight: 800; color: #000; line-height: 1.3; }
+          .stat-box.highlight { background: #e0e7ff; border-color: #6366f1; }
+          .stat-box.highlight .value { color: #3730a3; }
+
+          .table-wrap {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 8.5px;
+            table-layout: fixed;
+            flex: 1;
+          }
+          tbody { height: 100%; }
+          th {
+            background: #1e293b;
+            color: #fff;
+            font-weight: 700;
+            padding: 4px 6px;
+            text-align: left;
+            font-size: 8px;
+            letter-spacing: 0.3px;
+          }
+          td {
+            padding: 3.5px 6px;
+            border-bottom: 0.5px solid #cbd5e1;
+            vertical-align: middle;
+            line-height: 1.4;
+            color: #000;
+            font-weight: 500;
+          }
+          tr:nth-child(even) td { background: #f8fafc; color: #000; }
+          .sunday td { background: #fef9c3 !important; color: #000 !important; }
+          .sunday td:first-child { border-left: 3px solid #ca8a04; }
+
+          .status-p  { color: #14532d; font-weight: 800; }
+          .status-a  { color: #7f1d1d; font-weight: 800; }
+          .status-hlf { color: #78350f; font-weight: 800; }
+
+          .tag {
+            display: inline-block;
+            font-size: 7px;
+            padding: 1px 4px;
+            border-radius: 3px;
+            margin-left: 3px;
+            font-weight: 700;
+            vertical-align: middle;
+          }
+          .tag-late  { background: #ffedd5; color: #9a3412; border: 1px solid #fdba74; }
+          .tag-early { background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd; }
+
           @media print {
-            body { padding: 0; }
+            html, body { height: 100%; }
+            .page { page-break-after: always; }
+            * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           }
         </style>
       </head>
       <body>
     `;
 
-    employeesToPrint.forEach((emp, index) => {
+    employeesToPrint.forEach((emp) => {
       const stats = getEmployeeStats(emp);
-      
+
       html += `
-        <div class="header">
-          <h1>Attendance Report</h1>
-          <div>${month} ${year}</div>
-        </div>
-        
-        <div class="emp-info">
-          <div>
-            <strong>Name:</strong> ${emp.name}<br/>
-            <strong>ID:</strong> ${emp.id}
+        <div class="page">
+          <div class="header">
+            <h1>Attendance Report</h1>
+            <div class="period">${month} ${year}</div>
           </div>
-          <div>
-            <strong>Designation:</strong> ${emp.designation || 'N/A'}<br/>
-            <strong>Department:</strong> ${emp.department || 'N/A'}
+
+          <div class="emp-info">
+            <div><span>Name: </span><strong>${emp.name}</strong></div>
+            <div><span>ID: </span><strong>${emp.id}</strong></div>
+            <div><span>Designation: </span><strong>${emp.designation || 'N/A'}</strong></div>
+            <div><span>Department: </span><strong>${emp.department || 'N/A'}</strong></div>
           </div>
-        </div>
 
-        <div class="stats-grid">
-          <div class="stat-box">Salary Days <strong>${stats.salaryDays}</strong></div>
-          <div class="stat-box">Present <strong>${stats.totalPresent}</strong></div>
-          <div class="stat-box">Half Days <strong>${stats.halfDay}</strong></div>
-          <div class="stat-box">Absent <strong>${stats.unpaidLeaves} / ${stats.totalLeaves}</strong></div>
-          <div class="stat-box">Late <strong>${stats.late}</strong></div>
-          <div class="stat-box">Early Leave <strong>${stats.earlyLeave}</strong></div>
-        </div>
+          <div class="stats-grid">
+            <div class="stat-box highlight">
+              <div class="label">Salary Days</div>
+              <div class="value">${stats.salaryDays}</div>
+            </div>
+            <div class="stat-box">
+              <div class="label">Present</div>
+              <div class="value">${stats.totalPresent}</div>
+            </div>
+            <div class="stat-box">
+              <div class="label">Half Days</div>
+              <div class="value">${stats.halfDay}</div>
+            </div>
+            <div class="stat-box">
+              <div class="label">Absent (Unpaid/Total)</div>
+              <div class="value">${stats.unpaidLeaves}/${stats.totalLeaves}</div>
+            </div>
+            <div class="stat-box">
+              <div class="label">Late Arrivals</div>
+              <div class="value">${stats.late}</div>
+            </div>
+            <div class="stat-box">
+              <div class="label">Early Leaves</div>
+              <div class="value">${stats.earlyLeave}</div>
+            </div>
+          </div>
 
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Day</th>
-              <th>In Time</th>
-              <th>Out Time</th>
-              <th>Working Hours</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${emp.attendance.map(record => {
-              let statusClass = '';
-              if(record.status === 'P') statusClass = 'status-p';
-              if(record.status === 'A') statusClass = 'status-a';
-              if(record.status === 'HLF') statusClass = 'status-hlf';
-
-              let inTimeExt = record.timeStatus?.late ? ' <i>(Late)</i>' : '';
-              let outTimeExt = record.timeStatus?.early ? ' <i>(Early)</i>' : '';
-
-              return `
-                <tr class="${record.isSunday ? 'sunday' : ''}">
-                  <td>${record.date}</td>
-                  <td>${record.dayOfWeek}</td>
-                  <td>${convertTo12Hour(record.inTime)}${inTimeExt}</td>
-                  <td>${convertTo12Hour(record.outTime)}${outTimeExt}</td>
-                  <td>${record.workingHours}</td>
-                  <td class="${statusClass}">${record.statusLabel}</td>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:14%">Date</th>
+                  <th style="width:8%">Day</th>
+                  <th style="width:22%">In Time</th>
+                  <th style="width:22%">Out Time</th>
+                  <th style="width:12%">Hours</th>
+                  <th style="width:22%">Status</th>
                 </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
-        ${index < employeesToPrint.length - 1 ? '<div class="page-break"></div>' : ''}
+              </thead>
+              <tbody>
+                ${emp.attendance.map(record => {
+                  let statusClass = '';
+                  if (record.status === 'P')   statusClass = 'status-p';
+                  if (record.status === 'A')   statusClass = 'status-a';
+                  if (record.status === 'HLF') statusClass = 'status-hlf';
+
+                  const lateTag  = record.timeStatus?.late
+                    ? `<span class="tag tag-late">+${record.timeStatus.late}</span>` : '';
+                  const earlyTag = record.timeStatus?.early
+                    ? `<span class="tag tag-early">-${record.timeStatus.early}</span>` : '';
+
+                  return `
+                    <tr class="${record.isSunday ? 'sunday' : ''}">
+                      <td>${record.date}</td>
+                      <td>${record.dayOfWeek}</td>
+                      <td>${convertTo12Hour(record.inTime)}${lateTag}</td>
+                      <td>${convertTo12Hour(record.outTime)}${earlyTag}</td>
+                      <td>${record.workingHours}</td>
+                      <td class="${statusClass}">${record.statusLabel}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
       `;
     });
 
     html += `
       <script>
         window.onload = function() {
-          setTimeout(() => {
-            window.print();
-            window.close();
-          }, 250);
+          setTimeout(() => { window.print(); window.close(); }, 250);
         }
       </script>
-      </body>
-      </html>
+      </body></html>
     `;
 
     printWindow.document.write(html);

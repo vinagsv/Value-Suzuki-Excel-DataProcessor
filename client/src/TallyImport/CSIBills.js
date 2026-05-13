@@ -213,10 +213,14 @@ export async function processFileClientSide(file, fromDateStr = null, toDateStr 
         }
 
         const currentSeq = parseInt(billMatch[1], 10);
+
+        // Insert auto-cancelled placeholders for any gaps in the bill sequence.
+        // These missing bills get a specific narration explaining why they were cancelled.
         if (lastValidSeq !== null && currentSeq > lastValidSeq + 1) {
             for (let missingSeq = lastValidSeq + 1; missingSeq < currentSeq; missingSeq++) {
                 const missingBillNumber = `${CONFIG.BILL_FORMAT.PREFIX}${String(missingSeq).padStart(8, '0')}`;
-                xml += buildCancelledXML(dateFormatted, escapeXML(missingBillNumber), "Auto Imported from Excel - Missing Number Cancelled");
+                const missingNarration = escapeXML(`Cancelled - Bill number missing from Excel register (sequence gap detected)`);
+                xml += buildCancelledXML(dateFormatted, escapeXML(missingBillNumber), missingNarration);
                 cancelledCount++;
             }
         }
@@ -224,18 +228,38 @@ export async function processFileClientSide(file, fromDateStr = null, toDateStr 
 
         const rawPaymentMode = (colIdx.mode !== -1) ? row[colIdx.mode] : '';
         const rawAmount = (colIdx.amount !== -1) ? row[colIdx.amount] : '';
-        const rawNarration = (colIdx.narration !== -1) ? (row[colIdx.narration] || '').toString().trim() : '';
+        // Use the Excel narration as-is (no prefix added)
+        const excelNarration = (colIdx.narration !== -1) ? (row[colIdx.narration] || '').toString().trim() : '';
 
-        const finalNarration = escapeXML(rawNarration ? `Auto Imported from Excel ${rawNarration}` : `Auto Imported from Excel`);
-        
         const validLedger = getValidLedgerName(rawPaymentMode);
         const isAmountInvalid = isInvalidNumber(rawAmount);
         const targetTotal = parseFloat(rawAmount) || 0;
 
         if (!validLedger || isAmountInvalid || targetTotal <= 0) {
-            xml += buildCancelledXML(dateFormatted, escapeXML(rawBillNumber), finalNarration);
+            // Build a specific cancellation reason based on which field(s) failed validation
+            const cancellationReasons = [];
+            if (!validLedger) {
+                const modeValue = (rawPaymentMode || '').toString().trim();
+                cancellationReasons.push(
+                    modeValue
+                        ? `unrecognised payment mode "${modeValue}"`
+                        : `payment mode is blank`
+                );
+            }
+            if (isAmountInvalid) {
+                cancellationReasons.push(`amount is missing or non-numeric`);
+            } else if (targetTotal <= 0) {
+                cancellationReasons.push(`amount is zero or negative (${rawAmount})`);
+            }
+            const cancelNarration = escapeXML(
+                `Cancelled - ${cancellationReasons.join('; ')}` +
+                (excelNarration ? ` | ${excelNarration}` : '')
+            );
+            xml += buildCancelledXML(dateFormatted, escapeXML(rawBillNumber), cancelNarration);
             cancelledCount++;
         } else {
+            // Normal voucher: use the Excel narration directly
+            const finalNarration = escapeXML(excelNarration);
             xml += buildNormalXML(dateFormatted, escapeXML(rawBillNumber), escapeXML(validLedger), targetTotal, finalNarration);
             createdCount++;
         }
@@ -272,12 +296,10 @@ export async function processFileClientSide(file, fromDateStr = null, toDateStr 
 // ==========================================
 
 function buildCancelledXML(dateFormatted, billNumber, narration) {
-    const uniqueGuid = window.crypto.randomUUID();
     let xml = `    <TALLYMESSAGE xmlns:UDF="TallyUDF">\n`;
-    xml += `     <VOUCHER REMOTEID="${uniqueGuid}" VCHTYPE="${CONFIG.VOUCHER.TYPE}" ACTION="Cancel" OBJVIEW="Invoice Voucher View">\n`;
+    xml += `     <VOUCHER VCHTYPE="${CONFIG.VOUCHER.TYPE}" ACTION="Cancel" OBJVIEW="Invoice Voucher View">\n`;
     xml += `      <DATE>${dateFormatted}</DATE>\n`;
     xml += `      <VCHSTATUSDATE>${dateFormatted}</VCHSTATUSDATE>\n`;
-    xml += `      <GUID>${uniqueGuid}</GUID>\n`;
     xml += `      <ENTEREDBY>accounts</ENTEREDBY>\n`;
     xml += `      <NARRATION>${narration}</NARRATION>\n`;
     xml += `      <OBJECTUPDATEACTION>Create</OBJECTUPDATEACTION>\n`;
@@ -456,8 +478,6 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
 }
 
 function buildNormalXML(dateFormatted, billNumber, paymentMode, targetTotal, narration) {
-    const uniqueGuid = window.crypto.randomUUID();
-    
     // Tax Calculation Logic
     const salesAmount = Math.round((targetTotal * 100 / 118) * 100) / 100;
     const cgstAmount = Math.round((targetTotal * 9 / 118) * 100) / 100;
@@ -476,13 +496,12 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, targetTotal, nar
     const roundOffAmountStr = roundOff.toFixed(2);
 
     let xml = `    <TALLYMESSAGE xmlns:UDF="TallyUDF">\n`;
-    xml += `     <VOUCHER REMOTEID="${uniqueGuid}" VCHTYPE="${CONFIG.VOUCHER.TYPE}" ACTION="Create" OBJVIEW="Invoice Voucher View">\n`;
+    xml += `     <VOUCHER VCHTYPE="${CONFIG.VOUCHER.TYPE}" ACTION="Create" OBJVIEW="Invoice Voucher View">\n`;
     xml += `      <OLDAUDITENTRYIDS.LIST TYPE="Number">\n`;
     xml += `       <OLDAUDITENTRYIDS>-1</OLDAUDITENTRYIDS>\n`;
     xml += `      </OLDAUDITENTRYIDS.LIST>\n`;
     xml += `      <DATE>${dateFormatted}</DATE>\n`;
     xml += `      <VCHSTATUSDATE>${dateFormatted}</VCHSTATUSDATE>\n`;
-    xml += `      <GUID>${uniqueGuid}</GUID>\n`;
     xml += `      <GSTREGISTRATIONTYPE>Unregistered/Consumer</GSTREGISTRATIONTYPE>\n`;
     xml += `      <VATDEALERTYPE>Unregistered</VATDEALERTYPE>\n`;
     xml += `      <STATENAME>${CONFIG.COMPANY.STATE}</STATENAME>\n`;
