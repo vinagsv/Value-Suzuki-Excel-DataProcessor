@@ -46,6 +46,10 @@ const CONFIG = {
             "Credit Card/Scan QR-Paytm",
             "State Bank of India-Current Account No 339"
         ],
+        // BANK_LEDGERS: these get VATDEALERTYPE=Regular, ISCOMMONPARTY=No, HASCASHFLOW=No.
+        // All other ledgers (cash, card, UPI, bank current accounts) get Unregistered/Yes/Yes.
+        // Bharat Pe and REF GST are confirmed as bank/debtor-type ledgers in Tally.
+        BANK_LEDGERS: new Set(["Bharat Pe", "REF GST"]),
         SALES: "Sales @ 18% GST Local",
         CGST: "CGST OUTPUT",
         SGST: "SGST OUTPUT",
@@ -219,7 +223,7 @@ export async function processFileClientSide(file, fromDateStr = null, toDateStr 
         if (lastValidSeq !== null && currentSeq > lastValidSeq + 1) {
             for (let missingSeq = lastValidSeq + 1; missingSeq < currentSeq; missingSeq++) {
                 const missingBillNumber = `${CONFIG.BILL_FORMAT.PREFIX}${String(missingSeq).padStart(8, '0')}`;
-                const missingNarration = escapeXML(`Cancelled - Bill number missing from Excel register (sequence gap detected)`);
+                const missingNarration = escapeXML(`Auto imported from excel - Cancelled due to bill number missing from Excel register (sequence gap detected)`);
                 xml += buildCancelledXML(dateFormatted, escapeXML(missingBillNumber), missingNarration);
                 cancelledCount++;
             }
@@ -252,7 +256,7 @@ export async function processFileClientSide(file, fromDateStr = null, toDateStr 
                 cancellationReasons.push(`amount is zero or negative (${rawAmount})`);
             }
             const cancelNarration = escapeXML(
-                `Cancelled - ${cancellationReasons.join('; ')}` +
+                `Auto imported from excel - Cancelled due to ${cancellationReasons.join('; ')}` +
                 (excelNarration ? ` | ${excelNarration}` : '')
             );
             xml += buildCancelledXML(dateFormatted, escapeXML(rawBillNumber), cancelNarration);
@@ -309,7 +313,6 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
     xml += `      <NUMBERINGSTYLE>Automatic (Manual Override)</NUMBERINGSTYLE>\n`;
     xml += `      <CSTFORMISSUETYPE>&#4; Not Applicable</CSTFORMISSUETYPE>\n`;
     xml += `      <CSTFORMRECVTYPE>&#4; Not Applicable</CSTFORMRECVTYPE>\n`;
-    xml += `      <PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>\n`;
     xml += `      <VCHSTATUSTAXADJUSTMENT>Default</VCHSTATUSTAXADJUSTMENT>\n`;
     xml += `      <VCHSTATUSVOUCHERTYPE>${CONFIG.VOUCHER.TYPE}</VCHSTATUSVOUCHERTYPE>\n`;
     xml += `      <VCHSTATUSTAXUNIT>${CONFIG.COMPANY.STATE} Registration</VCHSTATUSTAXUNIT>\n`;
@@ -412,7 +415,7 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
     xml += `      <VCHSTATUSISFETCHEDONLY>No</VCHSTATUSISFETCHEDONLY>\n`;
     xml += `      <VCHGSTSTATUSISOPTIONALUNCERTAIN>No</VCHGSTSTATUSISOPTIONALUNCERTAIN>\n`;
     xml += `      <VCHSTATUSISREACCEPTFORHSNDONE>No</VCHSTATUSISREACCEPTFORHSNDONE>\n`;
-    xml += `      <VCHSTATUSISREACCEPHSNSIXONEDONE>No</VCHSTATUSISREACCEPHSNSIXONEDONE>\n`;
+    xml += `      <VCHSTATUSISREACCEPHSNSIXONEDONE>Yes</VCHSTATUSISREACCEPHSNSIXONEDONE>\n`;
     xml += `      <PAYMENTLINKHASMULTIREF>No</PAYMENTLINKHASMULTIREF>\n`;
     xml += `      <ISSHIPPINGWITHINSTATE>No</ISSHIPPINGWITHINSTATE>\n`;
     xml += `      <ISOVERSEASTOURISTTRANS>No</ISOVERSEASTOURISTTRANS>\n`;
@@ -478,19 +481,33 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
 }
 
 function buildNormalXML(dateFormatted, billNumber, paymentMode, targetTotal, narration) {
-    // Tax Calculation Logic
+    // ─── Ledger-type flags ────────────────────────────────────────────────────
+    // Bharat Pe is a bank/debtor-type ledger in Tally → Regular / No / No.
+    // All other ledgers (cash, card, UPI, current accounts) → Unregistered / Yes / Yes.
+    const isBankLedger   = CONFIG.LEDGERS.BANK_LEDGERS.has(paymentMode);
+    const vatDealerType  = isBankLedger ? 'Regular' : 'Unregistered';
+    const isCommonParty  = isBankLedger ? 'No' : 'Yes';
+    const hasCashFlow    = isBankLedger ? 'No' : 'Yes';
+
+    // ─── Tax Calculation Logic ────────────────────────────────────────────────
+    // Step 1: Derive the base sales amount (pre-tax) from the GST-inclusive total.
     const salesAmount = Math.round((targetTotal * 100 / 118) * 100) / 100;
-    const cgstAmount = Math.round((targetTotal * 9 / 118) * 100) / 100;
-    const sgstAmount = Math.round((targetTotal * 9 / 118) * 100) / 100;
-    
+
+    // Compute CGST/SGST as 9% of the rounded salesAmount, NOT as 9/118 of
+    // the gross total. Tally uses the already-rounded base for tax lines, so
+    // deriving from the gross gives a different (wrong) cent-level result.
+    // e.g. total=441 → salesAmount=373.73 → cgst = round(373.73*0.09,2) = 33.64
+    //       vs old: round(441*9/118,2) = 33.62  ← wrong
+    const cgstAmount = Math.round(salesAmount * CONFIG.TAX_INFO.CGST_RATE / 100 * 100) / 100;
+    const sgstAmount = Math.round(salesAmount * CONFIG.TAX_INFO.SGST_RATE / 100 * 100) / 100;
+
     const calculatedTotal = salesAmount + cgstAmount + sgstAmount;
     const roundOff = Math.round((targetTotal - calculatedTotal) * 100) / 100;
-    
+
     const targetTotalStr = targetTotal.toFixed(2);
     const salesAmountStr = salesAmount.toFixed(2);
     const cgstAmountStr = cgstAmount.toFixed(2);
     const sgstAmountStr = sgstAmount.toFixed(2);
-    
     // Pass the roundOff value exactly as calculated, keeping its native sign.
     // Tally retains ISDEEMEDPOSITIVE as 'No' and simply processes negative values smoothly.
     const roundOffAmountStr = roundOff.toFixed(2);
@@ -503,7 +520,9 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, targetTotal, nar
     xml += `      <DATE>${dateFormatted}</DATE>\n`;
     xml += `      <VCHSTATUSDATE>${dateFormatted}</VCHSTATUSDATE>\n`;
     xml += `      <GSTREGISTRATIONTYPE>Unregistered/Consumer</GSTREGISTRATIONTYPE>\n`;
-    xml += `      <VATDEALERTYPE>Unregistered</VATDEALERTYPE>\n`;
+    // Must be "Regular" — Tally uses this for the company's own dealer type,
+    // not the customer's. "Unregistered" was causing incorrect GST classification.
+    xml += `      <VATDEALERTYPE>${vatDealerType}</VATDEALERTYPE>\n`;
     xml += `      <STATENAME>${CONFIG.COMPANY.STATE}</STATENAME>\n`;
     xml += `      <ENTEREDBY>accounts</ENTEREDBY>\n`;
     xml += `      <NARRATION>${narration}</NARRATION>\n`;
@@ -541,7 +560,8 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, targetTotal, nar
     xml += `      <ISSECURITYONWHENENTERED>Yes</ISSECURITYONWHENENTERED>\n`;
     xml += `      <ASORIGINAL>No</ASORIGINAL>\n`;
     xml += `      <AUDITED>No</AUDITED>\n`;
-    xml += `      <ISCOMMONPARTY>Yes</ISCOMMONPARTY>\n`;
+    // ISCOMMONPARTY: Yes for cash ledgers (Cash-New), No for bank/gateway ledgers.
+    xml += `      <ISCOMMONPARTY>${isCommonParty}</ISCOMMONPARTY>\n`;
     xml += `      <FORJOBCOSTING>No</FORJOBCOSTING>\n`;
     xml += `      <ISOPTIONAL>No</ISOPTIONAL>\n`;
     xml += `      <EFFECTIVEDATE>${dateFormatted}</EFFECTIVEDATE>\n`;
@@ -638,7 +658,10 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, targetTotal, nar
     xml += `      <ISSHIPPINGWITHINSTATE>No</ISSHIPPINGWITHINSTATE>\n`;
     xml += `      <ISOVERSEASTOURISTTRANS>No</ISOVERSEASTOURISTTRANS>\n`;
     xml += `      <ISDESIGNATEDZONEPARTY>No</ISDESIGNATEDZONEPARTY>\n`;
-    xml += `      <HASCASHFLOW>Yes</HASCASHFLOW>\n`;
+    // Must be "No" — HASCASHFLOW=Yes incorrectly flags this as a cash-flow
+    // transaction. Tally sets this based on ledger type internally; forcing Yes
+    // HASCASHFLOW: Yes for cash ledgers (Cash-New), No for bank/gateway ledgers.
+    xml += `      <HASCASHFLOW>${hasCashFlow}</HASCASHFLOW>\n`;
     xml += `      <ISPOSTDATED>No</ISPOSTDATED>\n`;
     xml += `      <USETRACKINGNUMBER>No</USETRACKINGNUMBER>\n`;
     xml += `      <ISINVOICE>Yes</ISINVOICE>\n`;
@@ -740,6 +763,7 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, targetTotal, nar
     xml += `       <LEDGERNAME>${CONFIG.LEDGERS.SALES}</LEDGERNAME>\n`;
     xml += `       <METHODTYPE>On Total Sales</METHODTYPE>\n`;
     xml += `       <GSTCLASS>&#4; Not Applicable</GSTCLASS>\n`;
+    xml += `       <GSTOVRDNINELIGIBLEITC>&#4; Applicable</GSTOVRDNINELIGIBLEITC>\n`;
     xml += `       <GSTOVRDNISREVCHARGEAPPL>&#4; Not Applicable</GSTOVRDNISREVCHARGEAPPL>\n`;
     xml += `       <GSTOVRDNTAXABILITY>Taxable</GSTOVRDNTAXABILITY>\n`;
     xml += `       <GSTSOURCETYPE>Ledger</GSTSOURCETYPE>\n`;
