@@ -6,7 +6,6 @@ import * as xlsx from 'xlsx';
 const CONFIG = {
     TARGET_SHEET_NAME: "BC AND VMA BILLS",
 
-    // Company Details
     COMPANY: {
         NAME: "Value Motor Agency Pvt Ltd 2021-22 - (from 1-Apr-22)",
         REMOTE_NAME: "Value Motor Agency Pvt Ltd 2021-22 - (from 1-Apr-22)",
@@ -16,30 +15,25 @@ const CONFIG = {
         COUNTRY: "India"
     },
 
-    // Voucher Configuration
     VOUCHER: {
         TYPE: "Work Shop Sale Vas"
     },
 
-    // Bill Format Configuration
     BILL_FORMAT: {
-        // Strictly matches "1/BC/" followed by exactly 8 digits
         REGEX: /^1\/BC\/(\d{8})$/i
     },
 
-    // Excel Column Mappings
     EXCEL_MAPPING: {
         DATE: 'DATE',
         BILL_NUM: 'BC BILLS NO',
         MODE_OF_PAYMENT: 'MODE OF PAYMENT',
-        TAXABLE_AMOUNT_18: 'TAX @18',   
-        TAXABLE_AMOUNT_5: 'TAX @5',     
+        TAXABLE_AMOUNT_18: 'TAX @18',
+        TAXABLE_AMOUNT_5: 'TAX @5',
         LABOUR_CHARGES: 'LABOUR CHRGS',
         TOTAL: 'TOTAL',
         NARRATION: 'NARRATION'
     },
 
-    // Ledger Names Configuration
     LEDGERS: {
         ALLOWED_PAYMENT_MODES: [
             "Bharat Pe",
@@ -49,25 +43,22 @@ const CONFIG = {
             "State Bank of India-Current Account No 339"
         ],
         SALES_18: "Sales @ 18% GST Local",
-        SALES_5: "Sales @ 5% Gst Local",     // 5% GST sales ledger
+        SALES_5: "Sales @ 5% Gst Local",
         CGST: "CGST OUTPUT",
         SGST: "SGST OUTPUT",
         ROUND_OFF: "Round Off",
         LABOUR: "Labour Charges Received"
     },
 
-    // Cost Centre Configuration
     COST_CENTRE: {
         CATEGORY: "Primary Cost Category",
         NAME_SERVICE: "Service"
     },
 
-    // Tax and HSN Information
     TAX_INFO: {
         SALES_HSN: "85319000",
         LABOUR_HSN: "998729",
         LABOUR_DESC: "Two Wheeler Servicing"
-        // Note: Sales @ 5% Gst Local has no HSN/source set on ledger entry
     }
 };
 
@@ -75,7 +66,6 @@ const CONFIG = {
 // HELPERS
 // ==========================================
 
-// Helper: Check if a value is strictly a valid number
 const isInvalidNumber = (val) => {
     if (val === undefined || val === null) return true;
     const strVal = val.toString().trim();
@@ -84,17 +74,12 @@ const isInvalidNumber = (val) => {
     return false;
 };
 
-// Helper: Validate Ledger
 const getValidLedgerName = (mode) => {
     const trimmedMode = (mode || '').toString().trim();
     const match = CONFIG.LEDGERS.ALLOWED_PAYMENT_MODES.find(l => l.toLowerCase() === trimmedMode.toLowerCase());
     return match || null;
 };
 
-/**
- * Converts Excel data to Tally XML client-side for BC Bills.
- * Now supports two taxable amount columns: TAX @18 and TAX @5.
- */
 export async function processBCFileClientSide(file, fromDateStr = null, toDateStr = null) {
     if (!file) {
         throw new Error("No file provided for processing.");
@@ -102,11 +87,11 @@ export async function processBCFileClientSide(file, fromDateStr = null, toDateSt
 
     const arrayBuffer = await file.arrayBuffer();
     const workbook = xlsx.read(arrayBuffer, { type: 'array' });
-    
+
     if (!workbook.SheetNames.includes(CONFIG.TARGET_SHEET_NAME)) {
         throw new Error(`Sheet named "${CONFIG.TARGET_SHEET_NAME}" not found in the uploaded Excel file.`);
     }
-    
+
     const sheet = workbook.Sheets[CONFIG.TARGET_SHEET_NAME];
     const data = xlsx.utils.sheet_to_json(sheet, { header: 1 });
 
@@ -116,13 +101,13 @@ export async function processBCFileClientSide(file, fromDateStr = null, toDateSt
 
     const headers = data[0].map(h => (h || '').toString().trim().toUpperCase());
     const colIdx = {
-        date:     headers.indexOf(CONFIG.EXCEL_MAPPING.DATE.toUpperCase()),
-        billNum:  headers.indexOf(CONFIG.EXCEL_MAPPING.BILL_NUM.toUpperCase()),
-        mode:     headers.indexOf(CONFIG.EXCEL_MAPPING.MODE_OF_PAYMENT.toUpperCase()),
+        date:      headers.indexOf(CONFIG.EXCEL_MAPPING.DATE.toUpperCase()),
+        billNum:   headers.indexOf(CONFIG.EXCEL_MAPPING.BILL_NUM.toUpperCase()),
+        mode:      headers.indexOf(CONFIG.EXCEL_MAPPING.MODE_OF_PAYMENT.toUpperCase()),
         taxable18: headers.indexOf(CONFIG.EXCEL_MAPPING.TAXABLE_AMOUNT_18.toUpperCase()),
         taxable5:  headers.indexOf(CONFIG.EXCEL_MAPPING.TAXABLE_AMOUNT_5.toUpperCase()),
-        labour:   headers.indexOf(CONFIG.EXCEL_MAPPING.LABOUR_CHARGES.toUpperCase()),
-        total:    headers.indexOf(CONFIG.EXCEL_MAPPING.TOTAL.toUpperCase()),
+        labour:    headers.indexOf(CONFIG.EXCEL_MAPPING.LABOUR_CHARGES.toUpperCase()),
+        total:     headers.indexOf(CONFIG.EXCEL_MAPPING.TOTAL.toUpperCase()),
         narration: headers.indexOf(CONFIG.EXCEL_MAPPING.NARRATION.toUpperCase())
     };
 
@@ -150,13 +135,11 @@ export async function processBCFileClientSide(file, fromDateStr = null, toDateSt
     let createdCount = 0;
     let cancelledCount = 0;
     let skippedCount = 0;
-
     let lastValidSeq = null;
 
-    // Skip header row (index 0)
     for (let i = 1; i < data.length; i++) {
         const row = data[i];
-        
+
         if (!row || row.length === 0 || row[colIdx.date] === undefined) {
             skippedCount++;
             continue;
@@ -178,27 +161,27 @@ export async function processBCFileClientSide(file, fromDateStr = null, toDateSt
 
         let dateFormatted = '';
         if (typeof dateRaw === 'number') {
-             const parsedDate = xlsx.SSF.parse_date_code(dateRaw);
-             const yyyy = parsedDate.y;
-             const mm = String(parsedDate.m).padStart(2, '0');
-             const dd = String(parsedDate.d).padStart(2, '0');
-             dateFormatted = `${yyyy}${mm}${dd}`;
+            const parsedDate = xlsx.SSF.parse_date_code(dateRaw);
+            const yyyy = parsedDate.y;
+            const mm = String(parsedDate.m).padStart(2, '0');
+            const dd = String(parsedDate.d).padStart(2, '0');
+            dateFormatted = `${yyyy}${mm}${dd}`;
         } else if (typeof dateRaw === 'string') {
-             let dStr = dateRaw.trim();
-             if (/\d{4}[-/]\d{2}[-/]\d{2}/.test(dStr)) {
-                 dateFormatted = dStr.replace(/[-/]/g, '');
-             } else if (/\d{2}[-/]\d{2}[-/]\d{4}/.test(dStr)) {
-                 const parts = dStr.split(/[-/]/);
-                 dateFormatted = `${parts[2]}${parts[1]}${parts[0]}`;
-             } else {
-                 const temp = new Date(dStr);
-                 if (!isNaN(temp)) {
-                     const yyyy = temp.getUTCFullYear();
-                     const mm = String(temp.getUTCMonth() + 1).padStart(2, '0');
-                     const dd = String(temp.getUTCDate()).padStart(2, '0');
-                     dateFormatted = `${yyyy}${mm}${dd}`;
-                 }
-             }
+            let dStr = dateRaw.trim();
+            if (/\d{4}[-/]\d{2}[-/]\d{2}/.test(dStr)) {
+                dateFormatted = dStr.replace(/[-/]/g, '');
+            } else if (/\d{2}[-/]\d{2}[-/]\d{4}/.test(dStr)) {
+                const parts = dStr.split(/[-/]/);
+                dateFormatted = `${parts[2]}${parts[1]}${parts[0]}`;
+            } else {
+                const temp = new Date(dStr);
+                if (!isNaN(temp)) {
+                    const yyyy = temp.getUTCFullYear();
+                    const mm = String(temp.getUTCMonth() + 1).padStart(2, '0');
+                    const dd = String(temp.getUTCDate()).padStart(2, '0');
+                    dateFormatted = `${yyyy}${mm}${dd}`;
+                }
+            }
         } else if (dateRaw instanceof Date) {
             const yyyy = dateRaw.getUTCFullYear();
             const mm = String(dateRaw.getUTCMonth() + 1).padStart(2, '0');
@@ -206,15 +189,8 @@ export async function processBCFileClientSide(file, fromDateStr = null, toDateSt
             dateFormatted = `${yyyy}${mm}${dd}`;
         }
 
-        // Apply Date Filtering
-        if (fromDateStr && dateFormatted < fromDateStr) {
-            skippedCount++;
-            continue;
-        }
-        if (toDateStr && dateFormatted > toDateStr) {
-            skippedCount++;
-            continue;
-        }
+        if (fromDateStr && dateFormatted < fromDateStr) { skippedCount++; continue; }
+        if (toDateStr && dateFormatted > toDateStr) { skippedCount++; continue; }
 
         const currentSeq = parseInt(billMatch[1], 10);
         if (lastValidSeq !== null && currentSeq > lastValidSeq + 1) {
@@ -227,16 +203,14 @@ export async function processBCFileClientSide(file, fromDateStr = null, toDateSt
         lastValidSeq = currentSeq;
 
         const rawPaymentMode = (colIdx.mode !== -1) ? row[colIdx.mode] : '';
-        const rawSales18 = (colIdx.taxable18 !== -1) ? row[colIdx.taxable18] : '';
-        const rawSales5  = (colIdx.taxable5  !== -1) ? row[colIdx.taxable5]  : '';
-        const rawLabour  = (colIdx.labour    !== -1) ? row[colIdx.labour]    : '';
-        const rawTotal   = (colIdx.total     !== -1) ? row[colIdx.total]     : '';
+        const rawSales18   = (colIdx.taxable18 !== -1) ? row[colIdx.taxable18] : '';
+        const rawSales5    = (colIdx.taxable5  !== -1) ? row[colIdx.taxable5]  : '';
+        const rawLabour    = (colIdx.labour    !== -1) ? row[colIdx.labour]    : '';
+        const rawTotal     = (colIdx.total     !== -1) ? row[colIdx.total]     : '';
         const rawNarration = (colIdx.narration !== -1) ? (row[colIdx.narration] || '').toString().trim() : '';
 
-        // Only generate narration if there is a raw narration or you explicitly want default text. 
-        // For matching the empty narration in your reference, we only set it if provided in the Excel sheet.
         const finalNarration = rawNarration ? `Auto Imported from Excel ${rawNarration}` : '';
-        
+
         const validLedger    = getValidLedgerName(rawPaymentMode);
         const isTotalInvalid = isInvalidNumber(rawTotal);
 
@@ -245,11 +219,12 @@ export async function processBCFileClientSide(file, fromDateStr = null, toDateSt
         const sales5Amount  = isInvalidNumber(rawSales5)  ? 0 : (parseFloat(rawSales5)  || 0);
         const labourAmount  = isInvalidNumber(rawLabour)  ? 0 : (parseFloat(rawLabour)  || 0);
 
-        // A bill is valid only if there is at least one taxable amount and a positive total
         const allAmountsZero = sales18Amount === 0 && sales5Amount === 0 && labourAmount === 0;
 
         if (!validLedger || isTotalInvalid || targetTotal <= 0 || allAmountsZero) {
-            xml += buildCancelledXML(dateFormatted, rawBillNumber, "cancelled, auto imported from Excel");
+            // Use Excel narration if present, otherwise fall back to default cancelled narration
+            const cancelledNarration = finalNarration || "cancelled, auto imported from Excel";
+            xml += buildCancelledXML(dateFormatted, rawBillNumber, cancelledNarration);
             cancelledCount++;
         } else {
             xml += buildNormalXML(dateFormatted, rawBillNumber, validLedger, sales18Amount, sales5Amount, labourAmount, targetTotal, finalNarration);
@@ -257,7 +232,6 @@ export async function processBCFileClientSide(file, fromDateStr = null, toDateSt
         }
     }
 
-    // Append remote company info closing blocks exactly as Tally outputs them
     xml += `    <TALLYMESSAGE xmlns:UDF="TallyUDF">\n`;
     xml += `     <COMPANY>\n`;
     xml += `      <REMOTECMPINFO.LIST MERGE="Yes">\n`;
@@ -276,7 +250,6 @@ export async function processBCFileClientSide(file, fromDateStr = null, toDateSt
     xml += `      </REMOTECMPINFO.LIST>\n`;
     xml += `     </COMPANY>\n`;
     xml += `    </TALLYMESSAGE>\n`;
-
     xml += `   </REQUESTDATA>\n`;
     xml += `  </IMPORTDATA>\n`;
     xml += ` </BODY>\n`;
@@ -290,6 +263,10 @@ export async function processBCFileClientSide(file, fromDateStr = null, toDateSt
 // ==========================================
 
 function buildCancelledXML(dateFormatted, billNumber, narration) {
+    // CONFIRMED from real Tally export (26001343):
+    // - OBJECTUPDATEACTION = Create (not Alter)
+    // - No PERSISTEDVIEW field
+    // - No CLASSNAME field
     let xml = `    <TALLYMESSAGE xmlns:UDF="TallyUDF">\n`;
     xml += `     <VOUCHER VCHTYPE="${CONFIG.VOUCHER.TYPE}" ACTION="Cancel" OBJVIEW="Invoice Voucher View">\n`;
     xml += `      <DATE>${dateFormatted}</DATE>\n`;
@@ -298,14 +275,13 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
         xml += `      <NARRATION>${narration}</NARRATION>\n`;
     }
     xml += `      <ENTEREDBY>accounts</ENTEREDBY>\n`;
-    xml += `      <OBJECTUPDATEACTION>Alter</OBJECTUPDATEACTION>\n`;
+    xml += `      <OBJECTUPDATEACTION>Create</OBJECTUPDATEACTION>\n`;
     xml += `      <VOUCHERTYPENAME>${CONFIG.VOUCHER.TYPE}</VOUCHERTYPENAME>\n`;
     xml += `      <GSTREGISTRATION TAXTYPE="GST" TAXREGISTRATION="${CONFIG.COMPANY.GSTIN}">${CONFIG.COMPANY.STATE} Registration</GSTREGISTRATION>\n`;
     xml += `      <VOUCHERNUMBER>${billNumber}</VOUCHERNUMBER>\n`;
     xml += `      <NUMBERINGSTYLE>Automatic (Manual Override)</NUMBERINGSTYLE>\n`;
     xml += `      <CSTFORMISSUETYPE>&#4; Not Applicable</CSTFORMISSUETYPE>\n`;
     xml += `      <CSTFORMRECVTYPE>&#4; Not Applicable</CSTFORMRECVTYPE>\n`;
-    xml += `      <PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>\n`;
     xml += `      <VCHSTATUSTAXADJUSTMENT>Default</VCHSTATUSTAXADJUSTMENT>\n`;
     xml += `      <VCHSTATUSVOUCHERTYPE>${CONFIG.VOUCHER.TYPE}</VCHSTATUSVOUCHERTYPE>\n`;
     xml += `      <VCHSTATUSTAXUNIT>${CONFIG.COMPANY.STATE} Registration</VCHSTATUSTAXUNIT>\n`;
@@ -477,21 +453,19 @@ function buildCancelledXML(dateFormatted, billNumber, narration) {
  * Builds a normal (non-cancelled) voucher XML.
  *
  * Tax computation:
- * CGST = (sales18 * 9%) + (sales5 * 2.5%) + (labour * 9%)
- * SGST = same as CGST
+ * Excel TAX @18 column = the 9% portion  -> CGST = SGST = that value; taxable base = value / 0.09
+ * Excel TAX @5  column = the 2.5% portion -> CGST = SGST = that value; taxable base = value / 0.025
+ * Labour is taxed at 9% CGST + 9% SGST on the labour amount directly
  */
 function buildNormalXML(dateFormatted, billNumber, paymentMode, sales18TaxAmount, sales5TaxAmount, labourAmount, targetTotal, narration) {
 
-    // --- Tax calculation ---
-    // Excel columns contain the tax amount (9% for @18, 2.5% for @5), not the taxable value
-    // Back-calculate the taxable base, then CGST = SGST = the original tax column value
-    const sales18Amount  = Math.round((sales18TaxAmount / 0.09)  * 100) / 100;  // taxable base for 18%
-    const sales5Amount   = Math.round((sales5TaxAmount  / 0.025) * 100) / 100;  // taxable base for 5%
+    const sales18Amount = Math.round((sales18TaxAmount / 0.09)  * 100) / 100;
+    const sales5Amount  = Math.round((sales5TaxAmount  / 0.025) * 100) / 100;
 
-    const cgst18    = sales18TaxAmount;   // already the 9% amount
-    const sgst18    = sales18TaxAmount;
-    const cgst5     = sales5TaxAmount;    // already the 2.5% amount
-    const sgst5     = sales5TaxAmount;
+    const cgst18     = sales18TaxAmount;
+    const sgst18     = sales18TaxAmount;
+    const cgst5      = sales5TaxAmount;
+    const sgst5      = sales5TaxAmount;
     const cgstLabour = Math.round((labourAmount * 0.09) * 100) / 100;
     const sgstLabour = Math.round((labourAmount * 0.09) * 100) / 100;
 
@@ -501,8 +475,6 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, sales18TaxAmount
     const calculatedTotal = sales18Amount + sales5Amount + labourAmount + totalCgst + totalSgst;
     const roundOff = Math.round((targetTotal - calculatedTotal) * 100) / 100;
     const roundOffAmountStr = roundOff.toFixed(2);
-
-    //XML construction
 
     let xml = `    <TALLYMESSAGE xmlns:UDF="TallyUDF">\n`;
     xml += `     <VOUCHER VCHTYPE="${CONFIG.VOUCHER.TYPE}" ACTION="Create" OBJVIEW="Invoice Voucher View">\n`;
@@ -522,7 +494,7 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, sales18TaxAmount
     xml += `      <COUNTRYOFRESIDENCE>${CONFIG.COMPANY.COUNTRY}</COUNTRYOFRESIDENCE>\n`;
     xml += `      <PLACEOFSUPPLY>${CONFIG.COMPANY.STATE}</PLACEOFSUPPLY>\n`;
     xml += `      <VOUCHERTYPENAME>${CONFIG.VOUCHER.TYPE}</VOUCHERTYPENAME>\n`;
-    xml += `      <CLASSNAME>Default Voucher Class</CLASSNAME>\n`;
+    xml += `      <CLASSNAME>DefaultVoucherClass</CLASSNAME>\n`;
     xml += `      <PARTYNAME>${paymentMode}</PARTYNAME>\n`;
     xml += `      <GSTREGISTRATION TAXTYPE="GST" TAXREGISTRATION="${CONFIG.COMPANY.GSTIN}">${CONFIG.COMPANY.STATE} Registration</GSTREGISTRATION>\n`;
     xml += `      <CMPGSTIN>${CONFIG.COMPANY.GSTIN}</CMPGSTIN>\n`;
@@ -1119,7 +1091,7 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, sales18TaxAmount
     xml += `       <TAXTYPEALLOCATIONS.LIST>       </TAXTYPEALLOCATIONS.LIST>\n`;
     xml += `      </LEDGERENTRIES.LIST>\n`;
 
-    // ── 7. ROUND OFF (only if ≥ 0.01) ─────────────────────────────────────────
+    // ── 7. ROUND OFF (only if >= 0.01) ─────────────────────────────────────────
     if (Math.abs(roundOff) >= 0.01) {
         xml += `      <LEDGERENTRIES.LIST>\n`;
         xml += `       <OLDAUDITENTRYIDS.LIST TYPE="Number">\n`;
@@ -1195,6 +1167,6 @@ function buildNormalXML(dateFormatted, billNumber, paymentMode, sales18TaxAmount
     xml += `      <GSTCONSIGNEEADDRESS.LIST>       </GSTCONSIGNEEADDRESS.LIST>\n`;
     xml += `     </VOUCHER>\n`;
     xml += `    </TALLYMESSAGE>\n`;
-    
+
     return xml;
 }
