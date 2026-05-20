@@ -40,7 +40,8 @@ const CONFIG = {
             "Cash-New",
             "REF GST",
             "Credit Card/Scan QR-Paytm",
-            "State Bank of India-Current Account No 339"
+            "State Bank of India-Current Account No 339",
+            "Customer Due Ledger"
         ],
         SALES_18: "Sales @ 18% GST Local",
         SALES_5: "Sales @ 5% Gst Local",

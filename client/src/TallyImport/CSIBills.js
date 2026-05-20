@@ -44,7 +44,8 @@ const CONFIG = {
             "Cash-New",
             "REF GST",
             "Credit Card/Scan QR-Paytm",
-            "State Bank of India-Current Account No 339"
+            "State Bank of India-Current Account No 339",
+            "Customer Due Ledger"
         ],
         // BANK_LEDGERS: these get VATDEALERTYPE=Regular, ISCOMMONPARTY=No, HASCASHFLOW=No.
         // All other ledgers (cash, card, UPI, bank current accounts) get Unregistered/Yes/Yes.

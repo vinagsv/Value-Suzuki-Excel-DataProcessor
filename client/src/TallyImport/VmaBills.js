@@ -20,7 +20,8 @@ const CONFIG = {
             "Cash-New",
             "REF GST",
             "Credit Card/Scan QR-Paytm",
-            "State Bank of India-Current Account No 339"
+            "State Bank of India-Current Account No 339",
+            "Customer Due Ledger"
         ],
         // Ledgers that represent cash/walk-in customers (unregistered consumers).
         // These affect VATDEALERTYPE, ISCOMMONPARTY, and HASCASHFLOW fields.
