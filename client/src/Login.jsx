@@ -75,7 +75,7 @@ const Login = ({ onLogin, initialError }) => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-white/60 border border-gray-200 rounded-2xl py-3.5 pl-12 pr-4 text-gray-800 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm"
-                placeholder="user@valuesuzuki.com"
+                placeholder="user@domain.com"
                 required
               />
             </div>

@@ -1,31 +1,46 @@
 import React, { useState, useEffect } from "react";
 import Navbar from "./components/Navbar";
 import Login from "./Login";
-import VahanConverter from "./components/VahanConverter";
-import InsuranceProcessor from "./components/InsuranceProcessor";
-import DMSNames from "./components/DMSNames";
 import InfoPage from "./components/InfoPage";
 import AttendanceApp from "./components/AttendanceApp";
 import SuzukiGatePass from "./components/SuzukiGatePass";
 import DpReceipt from "./components/DpReceipt";
-import Receipt from "./components/Receipt"; 
-import Verify from "./ReqFetch/Verify";
+import Receipt from "./components/Receipt";
+import Verify from "./components/Verify";            
 import PriceList from "./components/PriceList";
 import UserProfile from "./components/UserProfile";
-import AdminPanel from "./components/AdminPanel"; 
+import AdminPanel from "./components/AdminPanel";
 import XmlGenerator from "./components/XmlGenerator";
 import Calculator from "./components/Calculator";
-import HSRPVahanMerger from "./components/HSRPVahanMerger";
+import ArchivePage from "./components/ArchivePage";
+import AuditLogPage from "./components/AuditLogPage";
+import ToolsPage from "./components/ToolsPage";
+
+const API_BASE = import.meta.env.VITE_API_URL || '';
+const isOwnApiRequest = (resource) => {
+  if (!API_BASE) return false;
+  try {
+    const url = typeof resource === 'string'
+      ? resource
+      : (resource && resource.url) ? resource.url : '';
+    return url.startsWith(API_BASE);
+  } catch {
+    return false;
+  }
+};
 
 const originalFetch = window.fetch;
 window.fetch = async (...args) => {
   let [resource, config] = args;
   config = config || {};
-  config.credentials = 'include';
-  
+  // Only attach credentials automatically for our own backend.
+  if (isOwnApiRequest(resource) && config.credentials === undefined) {
+    config.credentials = 'include';
+  }
   try {
     const response = await originalFetch(resource, config);
-    if (response.status === 401) {
+    // Only treat 401s from our own API as a session expiry.
+    if (response.status === 401 && isOwnApiRequest(resource)) {
       window.dispatchEvent(new Event('auth:session-expired'));
     }
     return response;
@@ -48,42 +63,46 @@ function App() {
   });
 
   const [activePage, setActivePage] = useState(() => {
-    return localStorage.getItem("activePage") || "gatepass";
+    return localStorage.getItem("activePage") || "receipt";
   });
 
-  // Read the initial calculator state from localStorage
   const [isCalcOpen, setIsCalcOpen] = useState(() => {
     return localStorage.getItem("isCalcOpen") === "true";
   });
+
+  // For QR scan deep-link: when a QR is scanned on mobile, we navigate to
+  // archive and pass the receipt number so ArchivePage can auto-select it.
+  const [qrScanTarget, setQrScanTarget] = useState(null);
 
   const [loginMessage, setLoginMessage] = useState("");
   const isDark = theme === "dark";
 
   // --- GLOBAL TOAST SYSTEM ---
   const [toasts, setToasts] = useState([]);
-  
+
   useEffect(() => {
     window.toast = (msg, type = 'info') => {
-        const id = Date.now() + Math.random();
-        setToasts(prev => [...prev, { id, msg, type }]);
-        setTimeout(() => {
-            setToasts(prev => prev.filter(t => t.id !== id));
-        }, 3000);
+      const id = Date.now() + Math.random();
+      setToasts(prev => [...prev, { id, msg, type }]);
+      setTimeout(() => {
+        setToasts(prev => prev.filter(t => t.id !== id));
+      }, 3000);
     };
   }, []);
 
+  // Global QR scan navigation: Receipt.jsx calls this when a QR is verified
+  // on mobile and the user should be taken to the archive view for that receipt.
   useEffect(() => {
-    localStorage.setItem("theme", theme);
-  }, [theme]);
+    window.navigateToArchiveReceipt = (receiptNo) => {
+      setQrScanTarget(receiptNo);
+      setActivePage("archive");
+    };
+    return () => { delete window.navigateToArchiveReceipt; };
+  }, []);
 
-  useEffect(() => {
-    localStorage.setItem("activePage", activePage);
-  }, [activePage]);
-
-  // Persist calculator state whenever it changes
-  useEffect(() => {
-    localStorage.setItem("isCalcOpen", isCalcOpen);
-  }, [isCalcOpen]);
+  useEffect(() => { localStorage.setItem("theme", theme); }, [theme]);
+  useEffect(() => { localStorage.setItem("activePage", activePage); }, [activePage]);
+  useEffect(() => { localStorage.setItem("isCalcOpen", isCalcOpen); }, [isCalcOpen]);
 
   useEffect(() => {
     const handleSessionExpiry = () => {
@@ -99,31 +118,32 @@ function App() {
     return () => window.removeEventListener('auth:session-expired', handleSessionExpiry);
   }, []);
 
-  // --- FORCE MOBILE LAYOUT ---
+  // ── Mobile layout: allow receipt + archive pages, block desktop-only pages ──
+  // We no longer force a single page on mobile — receipt and archive both work.
   useEffect(() => {
-    const enforceMobileLayout = () => {
+    const handleResize = () => {
       if (window.innerWidth < 1024) {
-        setActivePage("receipt"); // Force receipt page on mobile
-        setIsCalcOpen(false);     // Force calculator closed on mobile
+        // On mobile only block the calculator sidebar
+        setIsCalcOpen(false);
+        // If currently on a desktop-only page, redirect to receipt
+        const mobileAllowed = ['receipt', 'archive', 'verify', 'gatepass', 'dp_receipt', 'pricelist', 'attendance', 'info', 'profile', 'admin', 'audit'];
+        if (!mobileAllowed.includes(activePage)) {
+          setActivePage("receipt");
+        }
       }
     };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [activePage]);
 
-    // Check on initial load
-    enforceMobileLayout();
-
-    // Listen for screen size changes
-    window.addEventListener("resize", enforceMobileLayout);
-    return () => window.removeEventListener("resize", enforceMobileLayout);
-  }, []);
-
-  const toggleTheme = () => setTheme(isDark ? "light" : "dark");
-  const toggleCalculator = () => setIsCalcOpen(!isCalcOpen);
+  const toggleTheme      = () => setTheme(isDark ? "light" : "dark");
+  const toggleCalculator = () => setIsCalcOpen(v => !v);
 
   const handleLogin = (role, email) => {
     localStorage.setItem("isLoggedIn", "true");
     localStorage.setItem("userRole", role);
-    if(email) localStorage.setItem("userEmail", email);
-    
+    if (email) localStorage.setItem("userEmail", email);
     setUserRole(role);
     setLoginMessage("");
     setIsAuthenticated(true);
@@ -149,22 +169,22 @@ function App() {
 
   return (
     <div className={`h-screen w-screen overflow-hidden flex flex-col transition-colors duration-300 ${isDark ? "bg-gray-900" : "bg-blue-50"}`}>
-      
+
       {/* GLOBAL TOAST CONTAINER */}
       <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none">
-          {toasts.map(t => (
-              <div key={t.id} className={`px-5 py-3 rounded-xl shadow-2xl text-sm font-bold text-white transition-all transform animate-fadeIn flex items-center gap-2 pointer-events-auto
-                  ${t.type === 'error' ? 'bg-red-600' : t.type === 'success' ? 'bg-green-600' : 'bg-blue-600'}`}>
-                  {t.msg}
-              </div>
-          ))}
+        {toasts.map(t => (
+          <div key={t.id} className={`px-5 py-3 rounded-xl shadow-2xl text-sm font-bold text-white transition-all transform animate-fadeIn flex items-center gap-2 pointer-events-auto
+            ${t.type === 'error' ? 'bg-red-600' : t.type === 'success' ? 'bg-green-600' : 'bg-blue-600'}`}>
+            {t.msg}
+          </div>
+        ))}
       </div>
 
       <div className="flex-none relative h-16 w-full z-50">
-        <Navbar 
-          activePage={activePage} 
-          setActivePage={setActivePage} 
-          theme={theme} 
+        <Navbar
+          activePage={activePage}
+          setActivePage={setActivePage}
+          theme={theme}
           toggleTheme={toggleTheme}
           onLogout={handleLogout}
           userRole={userRole}
@@ -175,51 +195,67 @@ function App() {
 
       <div className="flex-1 w-full relative flex overflow-hidden">
         <div className="flex-1 relative overflow-hidden">
+
           <div className={`absolute inset-0 overflow-y-auto ${activePage === "receipt" ? "block" : "hidden"}`}>
             <Receipt theme={theme} />
           </div>
+
+          {/* Archive page: now available on mobile too */}
+          <div className={`absolute inset-0 overflow-hidden ${activePage === "archive" ? "block" : "hidden"}`}>
+            <ArchivePage
+              theme={theme}
+              initialScanTarget={qrScanTarget}
+              onScanTargetConsumed={() => setQrScanTarget(null)}
+            />
+          </div>
+
           <div className={`absolute inset-0 overflow-y-auto ${activePage === "verify" ? "block" : "hidden"}`}>
             <Verify theme={theme} />
           </div>
+
           <div className={`absolute inset-0 overflow-hidden ${activePage === "pricelist" ? "block" : "hidden"}`}>
             <PriceList theme={theme} isActive={activePage === "pricelist"} />
           </div>
+
           <div className={`absolute inset-0 overflow-y-auto ${activePage === "gatepass" ? "block" : "hidden"}`}>
             <SuzukiGatePass theme={theme} />
           </div>
+
           <div className={`absolute inset-0 overflow-y-auto ${activePage === "dp_receipt" ? "block" : "hidden"}`}>
             <DpReceipt theme={theme} />
           </div>
-          <div className={`absolute inset-0 overflow-y-auto ${activePage === "vahan" ? "block" : "hidden"}`}>
-            <VahanConverter theme={theme} />
+
+          <div className={`absolute inset-0 overflow-y-auto ${activePage === "tools" ? "block" : "hidden"}`}>
+            <ToolsPage theme={theme} />
           </div>
-          <div className={`absolute inset-0 overflow-y-auto ${activePage === "hsrp_vahan" ? "block" : "hidden"}`}>
-            <HSRPVahanMerger theme={theme} />
-          </div>
-          <div className={`absolute inset-0 overflow-y-auto ${activePage === "insurance" ? "block" : "hidden"}`}>
-            <InsuranceProcessor theme={theme} />
-          </div>
-          <div className={`absolute inset-0 overflow-y-auto ${activePage === "dms" ? "block" : "hidden"}`}>
-            <DMSNames theme={theme} />
-          </div>
+
           <div className={`absolute inset-0 overflow-y-auto ${activePage === "tally" ? "block" : "hidden"}`}>
             <XmlGenerator theme={theme} />
           </div>
+
           <div className={`absolute inset-0 overflow-y-auto ${activePage === "attendance" ? "block" : "hidden"}`}>
             <AttendanceApp theme={theme} />
           </div>
+
           <div className={`absolute inset-0 overflow-y-auto ${activePage === "info" ? "block" : "hidden"}`}>
             <InfoPage theme={theme} />
           </div>
+
           <div className={`absolute inset-0 overflow-y-auto ${activePage === "profile" ? "block" : "hidden"}`}>
             <UserProfile theme={theme} />
           </div>
+
           <div className={`absolute inset-0 overflow-y-auto ${activePage === "admin" ? "block" : "hidden"}`}>
             {userRole === 'admin' && <AdminPanel theme={theme} />}
           </div>
+
+          <div className={`absolute inset-0 overflow-y-auto ${activePage === "audit" ? "block" : "hidden"}`}>
+            {userRole === 'admin' && <AuditLogPage theme={theme} />}
+          </div>
+
         </div>
 
-        {/* GLOBAL CALCULATOR SIDEBAR */}
+        {/* GLOBAL CALCULATOR SIDEBAR — desktop only */}
         {isCalcOpen && (
           <aside className={`w-[280px] lg:w-[320px] flex-none border-l flex flex-col h-full z-40 transition-all shadow-[-4px_0_15px_rgba(0,0,0,0.05)] ${isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'}`}>
             <Calculator theme={theme} />

@@ -3,7 +3,7 @@ import { useReactToPrint } from 'react-to-print';
 import { ToWords } from 'to-words';
 import { Printer, FileSpreadsheet, Search, Edit3, XCircle, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import tailwindStyles from '../index.css?inline'; 
+import tailwindStyles from '../index.css?inline';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -15,32 +15,32 @@ const toWords = new ToWords({
 const DpReceipt = ({ theme }) => {
   const isDark = theme === 'dark';
   const componentRef = useRef(null);
-  
-  const LAYOUT = { 
-    pagePadding: '15mm', 
-    logoHeight: '120', 
-    logoWidth: 'auto', 
-    logoMarginBottom: '2', 
+
+  const LAYOUT = {
+    pagePadding: '15mm',
+    logoHeight: '120',
+    logoWidth: 'auto',
+    logoMarginBottom: '2',
     logoVerticalOffset: '-30',
-    headerMarginBottom: '4', 
-    companyNameSize: 'xl', 
-    addressTextSize: 'sm', 
-    titleMarginBottom: '4', 
-    titleTextSize: 'lg', 
-    bodySpacing: '4', 
-    bodyTextSize: 'base', 
-    footerMarginTop: '16', 
-    disclaimerMarginTop: '8', 
-    amountBoxPaddingX: '6', 
-    amountBoxPaddingY: '3', 
-    amountBoxMarginLeft: '8' 
+    headerMarginBottom: '4',
+    companyNameSize: 'xl',
+    addressTextSize: 'sm',
+    titleMarginBottom: '4',
+    titleTextSize: 'lg',
+    bodySpacing: '4',
+    bodyTextSize: 'base',
+    footerMarginTop: '16',
+    disclaimerMarginTop: '8',
+    amountBoxPaddingX: '6',
+    amountBoxPaddingY: '3',
+    amountBoxMarginLeft: '8'
   };
 
   const initialForm = {
     receiptNo: '',
     date: new Date().toISOString().split('T')[0],
     customerName: '',
-    hp: 'IDFC FIRST BANK LTD',
+    hp: 'L&T Finance Ltd',
     model: 'ACCESS 125 RC (BT)',
     amount: '',
     paymentMode: 'Cash'
@@ -52,8 +52,7 @@ const DpReceipt = ({ theme }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [availableMonths, setAvailableMonths] = useState([]);
   const [exportMonth, setExportMonth] = useState('');
-  
-  // Pagination State
+
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
@@ -63,7 +62,6 @@ const DpReceipt = ({ theme }) => {
     fetchAvailableMonths();
   }, []);
 
-  // Reset to first page when search changes
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, exportMonth]);
@@ -73,21 +71,27 @@ const DpReceipt = ({ theme }) => {
       const res = await fetch(`${API_URL}/receipts/next`);
       const data = await res.json();
       setFormData(prev => ({ ...prev, receiptNo: String(data.nextNo) }));
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const fetchHistory = async () => {
     try {
       const res = await fetch(`${API_URL}/receipts/list`);
       setHistory(await res.json());
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const fetchAvailableMonths = async () => {
     try {
       const res = await fetch(`${API_URL}/receipts/months`);
       if (res.ok) setAvailableMonths(await res.json());
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleChange = (e) => {
@@ -97,13 +101,13 @@ const DpReceipt = ({ theme }) => {
 
   const handleEdit = (item) => {
     setFormData({
-        receiptNo: item.receipt_no,
-        date: new Date(item.date).toISOString().split('T')[0],
-        customerName: item.customer_name,
-        hp: item.hp_financier || '',
-        model: item.model || '',
-        amount: item.amount,
-        paymentMode: item.payment_mode || 'Cash'
+      receiptNo: item.receipt_no,
+      date: new Date(item.date).toISOString().split('T')[0],
+      customerName: item.customer_name,
+      hp: item.hp_financier || '',
+      model: item.model || '',
+      amount: item.amount,
+      paymentMode: item.payment_mode || 'Cash'
     });
     setIsEditing(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -117,14 +121,10 @@ const DpReceipt = ({ theme }) => {
 
   const handleDelete = async () => {
     if (!window.confirm(`Are you sure you want to completely delete Receipt No: ${formData.receiptNo}? This action cannot be undone.`)) {
-        return;
+      return;
     }
-    
     try {
-      const res = await fetch(`${API_URL}/receipts/${formData.receiptNo}`, {
-        method: 'DELETE'
-      });
-      
+      const res = await fetch(`${API_URL}/receipts/${formData.receiptNo}`, { method: 'DELETE' });
       if (res.ok) {
         await fetchHistory();
         await fetchAvailableMonths();
@@ -138,10 +138,12 @@ const DpReceipt = ({ theme }) => {
     }
   };
 
+  // Server now uses ON CONFLICT DO UPDATE, so duplicate receipt numbers are handled
+  // gracefully — no database errors, latest data always wins.
   const saveToDb = async () => {
     const method = isEditing ? 'PUT' : 'POST';
     const url = isEditing ? `${API_URL}/receipts/${formData.receiptNo}` : `${API_URL}/receipts`;
-    
+
     try {
       await fetch(url, {
         method,
@@ -151,47 +153,53 @@ const DpReceipt = ({ theme }) => {
           date: formData.date,
           customer_name: formData.customerName,
           amount: formData.amount,
-          payment_mode: formData.paymentMode, 
+          payment_mode: formData.paymentMode,
           hp_financier: formData.hp,
           model: formData.model
         })
       });
-      
+
       await fetchHistory();
       await fetchAvailableMonths();
 
       if (isEditing) {
-          setIsEditing(false);
-          setFormData(initialForm);
-          fetchNextReceiptNo();
+        setIsEditing(false);
+        setFormData(initialForm);
+        fetchNextReceiptNo();
       } else {
-          setFormData(prev => ({ ...prev, amount: '', customerName: '' }));
-          await fetchNextReceiptNo();
+        setFormData(prev => ({ ...prev, amount: '', customerName: '' }));
+        await fetchNextReceiptNo();
       }
-    } catch (err) { alert("Error saving receipt."); }
+    } catch (err) {
+      alert("Error saving receipt.");
+    }
   };
 
   const handlePrint = useReactToPrint({
     contentRef: componentRef,
     documentTitle: `Receipt_${formData.receiptNo}`,
     onBeforeGetContent: () => {
-        if (!formData.amount || isNaN(formData.amount)) {
-            alert("Please enter a valid amount.");
-            return Promise.reject();
-        }
+      if (!formData.amount || isNaN(formData.amount)) {
+        alert("Please enter a valid amount.");
+        return Promise.reject();
+      }
     },
     onAfterPrint: saveToDb
   });
 
-  const amountInWords = formData.amount && !isNaN(formData.amount) ? toWords.convert(formData.amount).toUpperCase() + " ONLY" : 'ZERO ONLY';
+  const amountInWords = formData.amount && !isNaN(formData.amount)
+    ? toWords.convert(formData.amount).toUpperCase() + " ONLY"
+    : 'ZERO ONLY';
 
   const filteredHistory = useMemo(() => {
     if (!searchTerm) return history;
     const lower = searchTerm.toLowerCase();
-    return history.filter(item => item.customer_name?.toLowerCase().includes(lower) || String(item.receipt_no).includes(lower));
+    return history.filter(item =>
+      item.customer_name?.toLowerCase().includes(lower) ||
+      String(item.receipt_no).includes(lower)
+    );
   }, [history, searchTerm]);
 
-  // Apply Pagination
   const totalPages = Math.ceil(filteredHistory.length / itemsPerPage);
   const paginatedHistory = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -199,7 +207,15 @@ const DpReceipt = ({ theme }) => {
   }, [filteredHistory, currentPage]);
 
   const processExport = (data, filename) => {
-    const dataToExport = data.map(item => ({ "Receipt No": item.receipt_no, "Date": new Date(item.date).toLocaleDateString(), "Customer Name": item.customer_name, "Model": item.model, "Financier": item.hp_financier, "Amount": item.amount, "Mode": item.payment_mode }));
+    const dataToExport = data.map(item => ({
+      "Receipt No": item.receipt_no,
+      "Date": new Date(item.date).toLocaleDateString(),
+      "Customer Name": item.customer_name,
+      "Model": item.model,
+      "Financier": item.hp_financier,
+      "Amount": item.amount,
+      "Mode": item.payment_mode
+    }));
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Receipts");
@@ -208,9 +224,11 @@ const DpReceipt = ({ theme }) => {
 
   const handleExport = async () => {
     if (exportMonth) {
-        const res = await fetch(`${API_URL}/receipts/list?month=${exportMonth}`);
-        processExport(await res.json(), `Receipts_Export_${exportMonth}.xlsx`);
-    } else processExport(filteredHistory, "Receipts_Export_Recent.xlsx");
+      const res = await fetch(`${API_URL}/receipts/list?month=${exportMonth}`);
+      processExport(await res.json(), `Receipts_Export_${exportMonth}.xlsx`);
+    } else {
+      processExport(filteredHistory, "Receipts_Export_Recent.xlsx");
+    }
   };
 
   const inputClass = `w-full p-2 rounded border text-sm ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"} focus:outline-none focus:ring-1 focus:ring-blue-500`;
@@ -218,12 +236,11 @@ const DpReceipt = ({ theme }) => {
   const tableHeaderClass = `px-4 py-2 text-left text-xs font-semibold ${isDark ? "text-gray-300 bg-gray-700" : "text-gray-600 bg-gray-100"}`;
   const tableRowClass = `border-b ${isDark ? "border-gray-700 hover:bg-gray-700/50" : "border-gray-100 hover:bg-gray-50"} transition-colors`;
 
-  // ─── RECEIPT INNER BODY ───────────────────────────────────────────────────
   const renderReceiptBody = () => (
     <>
       <div className={`flex justify-between items-start mb-${LAYOUT.headerMarginBottom}`}>
         <div className="flex flex-col items-center w-1/3">
-          <img src="/suzuki-logo.png" alt="Suzuki Logo" className={`mb-${LAYOUT.logoMarginBottom} z-10`} style={{ height: `${LAYOUT.logoHeight}px`, width: LAYOUT.logoWidth, objectFit: 'contain', position: 'relative', top: `${LAYOUT.logoVerticalOffset}px` }} onError={(e) => { e.target.style.display='none' }}/>
+          <img src="/suzuki-logo.png" alt="Suzuki Logo" className={`mb-${LAYOUT.logoMarginBottom} z-10`} style={{ height: `${LAYOUT.logoHeight}px`, width: LAYOUT.logoWidth, objectFit: 'contain', position: 'relative', top: `${LAYOUT.logoVerticalOffset}px` }} onError={(e) => { e.target.style.display = 'none' }} />
         </div>
         <div className="w-2/3 text-right">
           <h1 className={`text-${LAYOUT.companyNameSize} font-bold uppercase tracking-wide`}>VALUE MOTOR AGENCY PVT LTD</h1>
@@ -231,16 +248,16 @@ const DpReceipt = ({ theme }) => {
           <p className={`text-${LAYOUT.addressTextSize} font-semibold`}>BANGALORE - 560052</p>
         </div>
       </div>
-      
+
       <div className={`text-center mb-${LAYOUT.titleMarginBottom}`}>
         <h2 className={`text-${LAYOUT.titleTextSize} font-bold underline decoration-2 underline-offset-4`}>RECEIPT</h2>
       </div>
-      
+
       <div className="flex justify-between mb-4 text-base font-medium">
         <div><span className="font-bold mr-2">NO:</span> <span className="text-xl text-red-600 font-bold">{formData.receiptNo}</span></div>
         <div><span className="font-bold mr-2">Date:</span> <span className="text-lg">{new Date(formData.date).toLocaleDateString('en-GB')}</span></div>
       </div>
-      
+
       <div className={`space-y-${LAYOUT.bodySpacing} text-${LAYOUT.bodyTextSize}`}>
         <div className="flex items-end"><span className="font-bold whitespace-nowrap mr-2">RECEIVED WITH THANKS FROM:</span><span className="border-b border-dotted border-black flex-grow px-2 uppercase font-bold text-xl leading-none">{formData.customerName}</span></div>
         <div className="flex items-end gap-4">
@@ -254,12 +271,12 @@ const DpReceipt = ({ theme }) => {
           <div className="italic text-lg font-medium" style={{ marginLeft: `${LAYOUT.amountBoxMarginLeft * 4}px` }}>by way of Cash/Cheque/Card/Online</div>
         </div>
         <div className="flex flex-nowrap gap-4 mt-4 pt-4">
-            <div className="flex items-end whitespace-nowrap"><span className="font-bold mr-1 text-base">NO-</span><span className="border-b border-dotted border-black w-32"></span></div>
-            <div className="flex items-end whitespace-nowrap"><span className="font-bold mr-1 text-base">-DATED-</span><span className="border-b border-dotted border-black w-32"></span></div>
-            <div className="flex items-end whitespace-nowrap"><span className="font-bold mr-1 text-base">-DRAWN ON-</span><span className="border-b border-dotted border-black w-40"></span></div>
+          <div className="flex items-end whitespace-nowrap"><span className="font-bold mr-1 text-base">NO-</span><span className="border-b border-dotted border-black w-32"></span></div>
+          <div className="flex items-end whitespace-nowrap"><span className="font-bold mr-1 text-base">-DATED-</span><span className="border-b border-dotted border-black w-32"></span></div>
+          <div className="flex items-end whitespace-nowrap"><span className="font-bold mr-1 text-base">-DRAWN ON-</span><span className="border-b border-dotted border-black w-40"></span></div>
         </div>
       </div>
-      
+
       <div className={`mt-${LAYOUT.footerMarginTop} flex justify-end`}>
         <div className="text-center">
           <div className="font-bold mb-8 text-lg">For Value Motor Agency Pvt Ltd</div>
@@ -270,37 +287,14 @@ const DpReceipt = ({ theme }) => {
     </>
   );
 
-  // ─── PRINT LAYOUT ─────────────────────────────────────────────────────────
   const renderPrintLayout = () => (
     <div
       ref={componentRef}
-      style={{
-        width: '210mm',
-        minHeight: '296mm',
-        padding: LAYOUT.pagePadding,
-        boxSizing: 'border-box',
-        backgroundColor: 'white',
-      }}
+      style={{ width: '210mm', minHeight: '296mm', padding: LAYOUT.pagePadding, boxSizing: 'border-box', backgroundColor: 'white' }}
     >
       <style type="text/css" media="print">
         {tailwindStyles}
-        {`
-          @page { size: A4 portrait; margin: 0mm !important; }
-          html, body {
-            margin: 0 !important;
-            padding: 0 !important;
-            background: white;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          .print-root {
-            width: 210mm !important;
-            height: 296mm !important;
-            padding: ${LAYOUT.pagePadding} !important;
-            box-sizing: border-box !important;
-            background: white !important;
-          }
-        `}
+        {`@page { size: A4 portrait; margin: 0mm !important; } html, body { margin: 0 !important; padding: 0 !important; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .print-root { width: 210mm !important; height: 296mm !important; padding: ${LAYOUT.pagePadding} !important; box-sizing: border-box !important; background: white !important; }`}
       </style>
       {renderReceiptBody()}
     </div>
@@ -313,20 +307,20 @@ const DpReceipt = ({ theme }) => {
           <div className={`w-full lg:w-1/3 p-6 rounded-xl shadow-lg h-fit ${isDark ? "bg-gray-800 border border-gray-700" : "bg-white border border-gray-100"}`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className={`text-lg font-bold ${isDark ? "text-white" : "text-gray-800"}`}>
-                  {isEditing ? "📝 Edit Receipt" : "Receipt Details"}
+                {isEditing ? "📝 Edit Receipt" : "Receipt Details"}
               </h2>
               <div className="flex gap-2">
-                  {isEditing && (
-                      <button onClick={handleDelete} className="text-red-500 hover:text-red-700 flex items-center gap-1 text-xs font-bold uppercase transition" title="Delete Receipt">
-                          <Trash2 size={16} /> Delete
-                      </button>
-                  )}
-                  <button onClick={cancelEdit} className="text-gray-500 hover:text-gray-700 flex items-center gap-1 text-xs font-bold uppercase transition" title={isEditing ? "Cancel Edit" : "Clear Form"}>
-                      <XCircle size={16} /> {isEditing ? "Cancel" : "Clear"}
+                {isEditing && (
+                  <button onClick={handleDelete} className="text-red-500 hover:text-red-700 flex items-center gap-1 text-xs font-bold uppercase transition" title="Delete Receipt">
+                    <Trash2 size={16} /> Delete
                   </button>
+                )}
+                <button onClick={cancelEdit} className="text-gray-500 hover:text-gray-700 flex items-center gap-1 text-xs font-bold uppercase transition" title={isEditing ? "Cancel Edit" : "Clear Form"}>
+                  <XCircle size={16} /> {isEditing ? "Cancel" : "Clear"}
+                </button>
               </div>
             </div>
-            
+
             <div className="space-y-3">
               <div><label className={labelClass}>Customer Name</label><input name="customerName" value={formData.customerName} onChange={handleChange} className={inputClass} placeholder="Ex: Vinag S V" /></div>
               <div className="grid grid-cols-2 gap-3">
@@ -336,14 +330,14 @@ const DpReceipt = ({ theme }) => {
               <div><label className={labelClass}>Receipt No (Editable)</label><input type="number" name="receiptNo" value={formData.receiptNo} onChange={handleChange} className={inputClass} /></div>
               <div><label className={labelClass}>HP (Financier)</label><input name="hp" value={formData.hp} onChange={handleChange} className={inputClass} /></div>
               <div><label className={labelClass}>Model</label><input name="model" value={formData.model} onChange={handleChange} className={inputClass} /></div>
-              <button onClick={handlePrint} className={`w-full mt-6 ${isEditing ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-600 hover:bg-blue-700"} text-white font-bold py-3 px-4 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all`}>
+              <button onClick={handlePrint} className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all">
                 <Printer size={20} /> {isEditing ? "Update & Reprint" : "Save & Print Receipt"}
               </button>
             </div>
           </div>
 
           <div className={`w-full lg:w-2/3 rounded-xl p-1 overflow-auto flex justify-center ${isDark ? "bg-gray-700/50" : "bg-gray-200"}`}>
-             <div className="transform scale-[0.6] md:scale-[0.75] lg:scale-90 origin-top p-4">
+            <div className="transform scale-[0.6] md:scale-[0.75] lg:scale-90 origin-top p-4">
               <div className="bg-white shadow-2xl text-black font-sans leading-snug mx-auto" style={{ width: '210mm', height: '296mm', maxHeight: '296mm', overflow: 'hidden', padding: LAYOUT.pagePadding, boxSizing: 'border-box' }}>
                 {renderReceiptBody()}
               </div>
@@ -355,17 +349,17 @@ const DpReceipt = ({ theme }) => {
           <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
             <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-800"}`}>History (Click row to Edit/Reprint)</h2>
             <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto items-center">
-               <div className="relative flex-1 w-full md:w-64 z-30">
-                 <input placeholder="Search history..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`w-full pl-10 pr-4 py-2 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-50 border-gray-300"} focus:outline-none focus:ring-2 focus:ring-blue-500`} />
-                 <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-               </div>
-               <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg border border-gray-300 w-full md:w-auto">
-                   <select className="bg-transparent text-sm p-1 outline-none text-gray-700 font-medium w-full md:w-auto" value={exportMonth} onChange={(e) => setExportMonth(e.target.value)}>
-                       <option value="">Current View</option>
-                       {availableMonths.map(m => <option key={m} value={m}>{m} (Full Month)</option>)}
-                   </select>
-                   <button onClick={handleExport} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm font-bold whitespace-nowrap transition-colors"><FileSpreadsheet size={16} /> Export</button>
-               </div>
+              <div className="relative flex-1 w-full md:w-64 z-30">
+                <input placeholder="Search history..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`w-full pl-10 pr-4 py-2 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-50 border-gray-300"} focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+              </div>
+              <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg border border-gray-300 w-full md:w-auto">
+                <select className="bg-transparent text-sm p-1 outline-none text-gray-700 font-medium w-full md:w-auto" value={exportMonth} onChange={(e) => setExportMonth(e.target.value)}>
+                  <option value="">Current View</option>
+                  {availableMonths.map(m => <option key={m} value={m}>{m} (Full Month)</option>)}
+                </select>
+                <button onClick={handleExport} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm font-bold whitespace-nowrap transition-colors"><FileSpreadsheet size={16} /> Export</button>
+              </div>
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -375,14 +369,14 @@ const DpReceipt = ({ theme }) => {
               </thead>
               <tbody>
                 {paginatedHistory.map((item) => (
-                  <tr key={item.receipt_no} className={`${tableRowClass} group cursor-pointer`} onClick={() => handleEdit(item)}>
+                  <tr key={`${item.receipt_no}-${item.date}`} className={`${tableRowClass} group cursor-pointer`} onClick={() => handleEdit(item)}>
                     <td className={`px-4 py-3 font-medium ${isDark ? "text-gray-300" : "text-gray-800"}`}>{item.receipt_no}</td>
                     <td className={`px-4 py-3 ${isDark ? "text-gray-400" : "text-gray-600"}`}>{new Date(item.date).toLocaleDateString()}</td>
                     <td className={`px-4 py-3 font-semibold ${isDark ? "text-gray-300" : "text-gray-800"}`}>{item.customer_name}</td>
                     <td className="px-4 py-3 text-green-600 font-bold">₹{item.amount}</td>
                     <td className="px-4 py-3">
                       <button className="flex items-center gap-1 text-blue-500 font-bold text-xs uppercase opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Edit3 size={14} /> Edit / Reprint
+                        <Edit3 size={14} /> Edit / Reprint
                       </button>
                     </td>
                   </tr>
@@ -391,39 +385,25 @@ const DpReceipt = ({ theme }) => {
             </table>
           </div>
 
-          {/* Pagination Controls */}
           {totalPages > 1 && (
             <div className={`flex items-center justify-between mt-4 px-4 py-3 rounded-lg border ${isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-              <button 
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
-                disabled={currentPage === 1} 
-                className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium transition-colors ${isDark ? 'bg-gray-800 border-gray-600 text-white hover:bg-gray-600' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50 disabled:cursor-not-allowed`}
-              >
+              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium transition-colors ${isDark ? 'bg-gray-800 border-gray-600 text-white hover:bg-gray-600' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50 disabled:cursor-not-allowed`}>
                 <ChevronLeft size={16} /> Previous
               </button>
-              
               <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
                 Page <span className="font-bold">{currentPage}</span> of {totalPages}
               </span>
-              
-              <button 
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
-                disabled={currentPage === totalPages} 
-                className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium transition-colors ${isDark ? 'bg-gray-800 border-gray-600 text-white hover:bg-gray-600' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50 disabled:cursor-not-allowed`}
-              >
+              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium transition-colors ${isDark ? 'bg-gray-800 border-gray-600 text-white hover:bg-gray-600' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50 disabled:cursor-not-allowed`}>
                 Next <ChevronRight size={16} />
               </button>
             </div>
           )}
-
         </div>
-      </div> {/* End of no-print wrapper */}
+      </div>
 
-      {/* Hidden print target for desktop react-to-print OR mobile native print */}
       <div className="print-only" style={{ position: 'absolute', overflow: 'hidden', height: 0, width: 0, top: '-9999px', left: '-9999px' }}>
         {renderPrintLayout()}
       </div>
-
     </div>
   );
 };

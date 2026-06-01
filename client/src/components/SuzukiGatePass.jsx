@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useReactToPrint } from 'react-to-print';
-import { Printer, Search, FileSpreadsheet, Edit3, XCircle, WifiOff, Trash2, ChevronLeft, ChevronRight, Database, Loader2, CheckCircle } from 'lucide-react';
+import { Printer, Search, FileSpreadsheet, Edit3, XCircle, WifiOff, Trash2, ChevronLeft, ChevronRight, Database, Loader2, CheckCircle, HardDrive } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import tailwindStyles from '../index.css?inline';
 
@@ -41,11 +41,17 @@ const SuzukiGatePass = ({ theme }) => {
   const [availableMonths, setAvailableMonths] = useState([]);
   const [exportMonth, setExportMonth] = useState('');
   const [serverError, setServerError] = useState(false);
-  
+
   // Database Update State
-  const [form22File, setForm22File] = useState(null);
   const [dbUploading, setDbUploading] = useState(false);
   const [dbStatus, setDbStatus] = useState(null);
+
+  // Local file data for instant search while upload happens in background.
+  // localRows holds normalized rows parsed from the selected file.
+  // useLocalSearch is true after a file is parsed and stays true until the
+  // background upload to the database finishes successfully.
+  const [localRows, setLocalRows] = useState([]);
+  const [useLocalSearch, setUseLocalSearch] = useState(false);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -113,10 +119,32 @@ const SuzukiGatePass = ({ theme }) => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Searches the locally parsed file rows. Mirrors the server search behaviour:
+  // matches on chassis number or customer name, case-insensitive.
+  const searchLocalRows = (query) => {
+    const q = query.toLowerCase();
+    return localRows
+      .filter(r =>
+        (r.chassis_no || '').toLowerCase().includes(q) ||
+        (r.customer_name || '').toLowerCase().includes(q)
+      )
+      .slice(0, 20);
+  };
+
   useEffect(() => {
-    const searchDb = async () => {
+    const runSearch = async () => {
       if (debouncedQuery.length >= 3) {
         setIsSearching(true);
+
+        // While the background upload is still in progress (or just done parsing),
+        // search the local file rows for instant results.
+        if (useLocalSearch) {
+          setSearchResults(searchLocalRows(debouncedQuery));
+          setIsSearching(false);
+          return;
+        }
+
+        // Otherwise use the database-backed search.
         try {
           const res = await fetch(`${API_URL}/form22/search?q=${debouncedQuery}`);
           if (res.ok) {
@@ -128,8 +156,8 @@ const SuzukiGatePass = ({ theme }) => {
         } catch (err) { console.error(err); setSearchResults([]); } finally { setIsSearching(false); }
       } else { setSearchResults([]); }
     };
-    searchDb();
-  }, [debouncedQuery]);
+    runSearch();
+  }, [debouncedQuery, useLocalSearch, localRows]);
 
   const selectVehicle = (vehicle) => {
     setFormData(prev => ({
@@ -139,7 +167,7 @@ const SuzukiGatePass = ({ theme }) => {
       model: vehicle.model || '',
       color: vehicle.color || ''
     }));
-    setSearchResults([]); 
+    setSearchResults([]);
     setSearchQuery('');
   };
 
@@ -172,12 +200,12 @@ const SuzukiGatePass = ({ theme }) => {
     if (!window.confirm(`Are you sure you want to completely delete Gate Pass No: ${formData.passNo}? This action cannot be undone.`)) {
         return;
     }
-    
+
     try {
       const res = await fetch(`${API_URL}/gatepass/${formData.passNo}`, {
         method: 'DELETE'
       });
-      
+
       if (res.ok) {
         await fetchHistory();
         await fetchAvailableMonths();
@@ -233,22 +261,68 @@ const SuzukiGatePass = ({ theme }) => {
       }
     } catch (err) { alert("Failed to save to database."); }
   };
-  
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setForm22File(file);
-      setDbStatus(null);
-    }
+
+  // Normalize a raw spreadsheet row into the same shape the DB search returns.
+  // Tries a range of common header spellings so local search "just works".
+  const normalizeRow = (row) => {
+    const pick = (...keys) => {
+      for (const key of keys) {
+        const found = Object.keys(row).find(k => k.trim().toLowerCase() === key.toLowerCase());
+        if (found && row[found] != null && String(row[found]).trim() !== '') return String(row[found]).trim();
+      }
+      return '';
+    };
+    return {
+      chassis_no: pick('chassis_no', 'chassis no', 'chassis number', 'chassis', 'chassisno'),
+      customer_name: pick('customer_name', 'customer name', 'customer', 'name', 'owner name', 'owner'),
+      model: pick('model', 'model name', 'vehicle model'),
+      color: pick('color', 'colour'),
+    };
   };
 
-  const uploadToDatabase = async () => {
-    if (!form22File) return;
+  // Parse the file in-browser so search works instantly, then kick off the
+  // background upload to the database. No button required.
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setDbStatus(null);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        const rows = json.map(normalizeRow).filter(r => r.chassis_no || r.customer_name);
+        setLocalRows(rows);
+        setUseLocalSearch(true);
+      } catch (err) {
+        console.error("Local parse error:", err);
+        setLocalRows([]);
+        setUseLocalSearch(false);
+      }
+      // Start the silent background upload regardless of parse outcome.
+      uploadToDatabase(file);
+    };
+    reader.onerror = () => {
+      console.error("Local file read error");
+      uploadToDatabase(file);
+    };
+    reader.readAsArrayBuffer(file);
+
+    // Allow re-selecting the same file later.
+    e.target.value = '';
+  };
+
+  // Silent background upload. On success, switch search back to the database.
+  const uploadToDatabase = async (file) => {
+    if (!file) return;
     setDbUploading(true);
     setDbStatus(null);
 
     const formPayload = new FormData();
-    formPayload.append('file', form22File);
+    formPayload.append('file', file);
 
     try {
       const response = await fetch(`${API_URL}/form22/upload`, {
@@ -257,14 +331,17 @@ const SuzukiGatePass = ({ theme }) => {
       });
       const data = await response.json();
       if (response.ok) {
-        setDbStatus({ type: 'success', message: data.message });
-        setForm22File(null);
+        setDbStatus({ type: 'success', message: data.message || 'Database updated.' });
+        // Upload finished — switch from local file search to database search.
+        setUseLocalSearch(false);
+        setLocalRows([]);
       } else {
         throw new Error(data.error || "Upload failed");
       }
     } catch (error) {
       console.error("DB Upload Error:", error);
-      setDbStatus({ type: 'error', message: "Upload failed. Check server logs." });
+      setDbStatus({ type: 'error', message: "Background upload failed. Still searching local file." });
+      // Keep local search available as a fallback since the DB wasn't updated.
     } finally {
       setDbUploading(false);
     }
@@ -421,40 +498,44 @@ const SuzukiGatePass = ({ theme }) => {
             </div>
 
             <fieldset disabled={serverError} className="space-y-2">
-              {/* Database Update Section */}
+              {/* Database Update Section - auto-uploads silently on file select */}
               <div className={`p-3 rounded-lg border mb-4 ${isDark ? 'bg-blue-900/10 border-blue-800/50' : 'bg-blue-50 border-blue-200'}`}>
                 <label className={labelClass}>Update Search Database (Form22)</label>
-                <div className="flex flex-col sm:flex-row gap-2 mt-2">
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls,.csv"
-                    onChange={handleFileUpload}
-                    className={`text-xs flex-1 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:cursor-pointer transition-colors ${
-                      isDark 
-                        ? 'text-gray-300 file:bg-blue-900/40 file:text-blue-400 hover:file:bg-blue-900/60' 
-                        : 'text-gray-600 file:bg-white file:text-blue-600 hover:file:bg-blue-50 border-gray-300'
-                    }`}
-                  />
-                  <button
-                    onClick={uploadToDatabase}
-                    disabled={!form22File || dbUploading}
-                    className={`px-3 py-1.5 rounded-md font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
-                      isDark 
-                        ? "bg-blue-600 hover:bg-blue-500 text-white disabled:bg-gray-700" 
-                        : "bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-300"
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    {dbUploading ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
-                    Upload
-                  </button>
-                </div>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleFileUpload}
+                  disabled={dbUploading}
+                  className={`text-xs w-full mt-2 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:cursor-pointer transition-colors ${
+                    isDark
+                      ? 'text-gray-300 file:bg-blue-900/40 file:text-blue-400 hover:file:bg-blue-900/60'
+                      : 'text-gray-600 file:bg-white file:text-blue-600 hover:file:bg-blue-50 border-gray-300'
+                  } disabled:opacity-50`}
+                />
+
+                {/* Background upload indicator */}
+                {dbUploading && (
+                  <div className={`mt-2 text-[10px] p-2 rounded border flex items-center gap-1.5 ${isDark ? "bg-blue-900/30 text-blue-300 border-blue-800" : "bg-blue-50 text-blue-700 border-blue-200"}`}>
+                    <Loader2 size={12} className="animate-spin" />
+                    Uploading to database in background — searching local file meanwhile…
+                  </div>
+                )}
+
+                {/* Active source indicator when local file is being used */}
+                {!dbUploading && useLocalSearch && (
+                  <div className={`mt-2 text-[10px] p-2 rounded border flex items-center gap-1.5 ${isDark ? "bg-amber-900/30 text-amber-300 border-amber-800" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                    <HardDrive size={12} />
+                    Searching local file ({localRows.length} rows)
+                  </div>
+                )}
+
                 {dbStatus && (
                   <div className={`mt-2 text-[10px] p-2 rounded border flex items-center gap-1.5 ${
-                    dbStatus.type === 'success' 
-                      ? (isDark ? "bg-green-900/30 text-green-400 border-green-800" : "bg-green-50 text-green-700 border-green-200") 
+                    dbStatus.type === 'success'
+                      ? (isDark ? "bg-green-900/30 text-green-400 border-green-800" : "bg-green-50 text-green-700 border-green-200")
                       : (isDark ? "bg-red-900/30 text-red-400 border-red-800" : "bg-red-50 text-red-700 border-red-200")
                   }`}>
-                    {dbStatus.type === 'success' && <CheckCircle size={12} />}
+                    {dbStatus.type === 'success' ? <CheckCircle size={12} /> : <WifiOff size={12} />}
                     {dbStatus.message}
                   </div>
                 )}
@@ -462,7 +543,12 @@ const SuzukiGatePass = ({ theme }) => {
 
               {/* Vehicle Search */}
               <div className="mb-3 relative z-30">
-                <label className={labelClass}>Vehicle Search (Chassis/Name)</label>
+                <label className={labelClass}>
+                  Vehicle Search (Chassis/Name)
+                  <span className={`ml-1 normal-case font-semibold ${useLocalSearch ? 'text-amber-500' : 'text-blue-500'}`}>
+                    {useLocalSearch ? '• local' : '• database'}
+                  </span>
+                </label>
                 <div className="relative">
                   <input
                     value={searchQuery}
@@ -584,21 +670,21 @@ const SuzukiGatePass = ({ theme }) => {
           {/* Pagination Controls */}
           {totalPages > 1 && (
             <div className={`flex items-center justify-between mt-4 px-4 py-3 rounded-lg border ${isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-              <button 
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
-                disabled={currentPage === 1} 
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
                 className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium transition-colors ${isDark ? 'bg-gray-800 border-gray-600 text-white hover:bg-gray-600' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 <ChevronLeft size={16} /> Previous
               </button>
-              
+
               <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
                 Page <span className="font-bold">{currentPage}</span> of {totalPages}
               </span>
-              
-              <button 
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
-                disabled={currentPage === totalPages} 
+
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
                 className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-medium transition-colors ${isDark ? 'bg-gray-800 border-gray-600 text-white hover:bg-gray-600' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 Next <ChevronRight size={16} />

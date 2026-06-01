@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   Moon, Sun, LogOut, UserCircle, Shield, Calculator,
-  ChevronLeft, ChevronRight, Menu, Info
+  ChevronLeft, ChevronRight, Menu, Info, History,
+  Receipt, Archive, Search
 } from "lucide-react";
 
 const NavbarStyle = () => (
@@ -67,14 +68,6 @@ const NavbarStyle = () => (
     .nb-root.light .nb-brand { border-color: rgba(0,0,0,0.07); }
     .nb-root.dark  .nb-brand { border-color: rgba(255,255,255,0.07); }
 
-    .nb-brand-icon {
-      width: 30px; height: 30px;
-      border-radius: 8px;
-      background: linear-gradient(135deg, #4f63f0, #8b5cf6);
-      display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 0 18px rgba(79,99,240,0.35);
-      flex-shrink: 0;
-    }
     .nb-brand-text {
       font-family: 'Syne', sans-serif;
       font-size: 15px;
@@ -162,30 +155,20 @@ const NavbarStyle = () => (
       transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
       outline: none;
     }
-    .nb-item .nb-item-icon { opacity: 0.7; flex-shrink: 0; transition: opacity 0.15s; }
-    .nb-item:hover .nb-item-icon { opacity: 1; }
 
-    /* Inactive - light */
-    .nb-root.light .nb-item {
-      color: #6b7280;
-    }
+    .nb-root.light .nb-item { color: #6b7280; }
     .nb-root.light .nb-item:hover {
       background: rgba(79,99,240,0.07);
       color: #4f63f0;
       border-color: rgba(79,99,240,0.15);
     }
-
-    /* Inactive - dark */
-    .nb-root.dark .nb-item {
-      color: #9ca3af;
-    }
+    .nb-root.dark .nb-item { color: #9ca3af; }
     .nb-root.dark .nb-item:hover {
       background: rgba(79,99,240,0.1);
       color: #818cf8;
       border-color: rgba(79,99,240,0.2);
     }
 
-    /* Active */
     .nb-root.light .nb-item.active {
       background: #4f63f0;
       color: #fff;
@@ -198,7 +181,6 @@ const NavbarStyle = () => (
       border-color: transparent;
       box-shadow: 0 2px 12px rgba(79,99,240,0.4);
     }
-    .nb-item.active .nb-item-icon { opacity: 1; }
 
     /* ── Divider ── */
     .nb-divider {
@@ -223,7 +205,6 @@ const NavbarStyle = () => (
     .nb-root.light .nb-actions { border-color: rgba(0,0,0,0.07); }
     .nb-root.dark  .nb-actions { border-color: rgba(255,255,255,0.07); }
 
-    /* Action icon buttons */
     .nb-action-btn {
       width: 34px; height: 34px;
       border-radius: 8px;
@@ -234,40 +215,21 @@ const NavbarStyle = () => (
       transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
       position: relative;
     }
+    .nb-action-btn.is-calc { width: 42px; height: 42px; }
 
-    /* Calculator enlarged button */
-    .nb-action-btn.is-calc {
-      width: 42px; height: 42px;
-    }
-
-    /* Default colour per theme */
     .nb-root.light .nb-action-btn { color: #9ca3af; }
     .nb-root.dark  .nb-action-btn { color: #6b7280; }
 
-    /* Hover */
     .nb-root.light .nb-action-btn:hover { background: rgba(0,0,0,0.05); color: #374151; border-color: rgba(0,0,0,0.08); }
     .nb-root.dark  .nb-action-btn:hover { background: rgba(255,255,255,0.07); color: #d1d5db; border-color: rgba(255,255,255,0.1); }
 
-    /* Active states per button type */
-    .nb-action-btn.is-active-calc {
-      background: rgba(5,150,105,0.1);
-      color: #059669;
-      border-color: rgba(5,150,105,0.2);
-    }
-    .nb-root.dark .nb-action-btn.is-active-calc {
-      background: rgba(52,211,153,0.1);
-      color: #34d399;
-      border-color: rgba(52,211,153,0.2);
-    }
+    .nb-action-btn.is-active-calc { background: rgba(5,150,105,0.1); color: #059669; border-color: rgba(5,150,105,0.2); }
+    .nb-root.dark .nb-action-btn.is-active-calc { background: rgba(52,211,153,0.1); color: #34d399; border-color: rgba(52,211,153,0.2); }
 
-    .nb-action-btn.is-theme {
-      color: inherit;
-    }
     .nb-root.light .nb-action-btn.is-theme { color: #6b7280; }
     .nb-root.dark  .nb-action-btn.is-theme { color: #fbbf24; }
     .nb-root.dark  .nb-action-btn.is-theme:hover { color: #fde68a; }
 
-    /* Tooltip */
     .nb-action-btn::after {
       content: attr(data-tip);
       position: absolute;
@@ -291,19 +253,17 @@ const NavbarStyle = () => (
     .nb-action-btn:hover::after { opacity: 1; }
 
     /* ── Dropdown Menu ── */
-    .nb-menu-wrapper {
-      position: relative;
-    }
+    .nb-menu-wrapper { position: relative; }
     .nb-dropdown {
       position: absolute;
       top: calc(100% + 12px);
       right: 0;
-      min-width: 180px;
+      min-width: 200px;
       border-radius: 8px;
       padding: 6px;
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 2px;
       z-index: 100;
     }
     .nb-root.light .nb-dropdown {
@@ -332,42 +292,68 @@ const NavbarStyle = () => (
     .nb-root.dark .nb-dropdown-btn { color: #d1d5db; }
     .nb-root.dark .nb-dropdown-btn:hover { background: rgba(255,255,255,0.07); }
 
-    .nb-dropdown-btn.active {
-      color: #4f63f0;
-      background: rgba(79,99,240,0.08);
-    }
-    .nb-root.dark .nb-dropdown-btn.active {
-      color: #818cf8;
-      background: rgba(99,102,241,0.15);
-    }
-
+    .nb-dropdown-btn.active { color: #4f63f0; background: rgba(79,99,240,0.08); }
+    .nb-root.dark .nb-dropdown-btn.active { color: #818cf8; background: rgba(99,102,241,0.15); }
     .nb-dropdown-btn.logout { color: #ef4444; }
     .nb-root.light .nb-dropdown-btn.logout:hover { background: rgba(239,68,68,0.1); }
     .nb-root.dark .nb-dropdown-btn.logout:hover { background: rgba(239,68,68,0.15); }
 
-    /* ── MOBILE LAYOUT RESTRICTIONS ── */
+    .nb-dropdown-divider { height: 1px; margin: 4px 6px; }
+    .nb-root.light .nb-dropdown-divider { background: rgba(0,0,0,0.07); }
+    .nb-root.dark  .nb-dropdown-divider { background: rgba(255,255,255,0.07); }
+
+    /* ── Mobile section label in dropdown ── */
+    .nb-dropdown-section-label {
+      padding: 4px 12px 2px;
+      font-family: 'Syne', sans-serif;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+    .nb-root.light .nb-dropdown-section-label { color: #9ca3af; }
+    .nb-root.dark  .nb-dropdown-section-label { color: #6b7280; }
+
+    /* ── MOBILE LAYOUT ── */
     @media (max-width: 1024px) {
+      /* Hide the horizontal nav bar on mobile */
       .nb-nav-wrap { display: none !important; }
+      /* Hide calculator button on mobile */
       .nb-action-btn.is-calc { display: none !important; }
-      .nb-dropdown-btn:not(.logout) { display: none !important; }
+      /* Remove left border from actions on mobile */
       .nb-actions { border-left: none !important; padding-left: 0 !important; }
+      /* Space brand and actions to opposite ends */
       .nb-root { justify-content: space-between; }
+      /* Widen dropdown on mobile for easier tapping */
+      .nb-dropdown { min-width: 220px; }
+      /* Larger tap targets in dropdown on mobile */
+      .nb-dropdown-btn { padding: 10px 14px; font-size: 14px; }
     }
   `}</style>
 );
 
+// ── Pages shown in the horizontal nav bar (desktop) ───────────────────────────
 const pages = [
-  { id: "receipt",    name: "Receipt"},
-  { id: "verify",    name: "Verify"},
-  { id: "pricelist", name: "Price List"},
-  { id: "gatepass",  name: "Gate Pass"},
-  { id: "dp_receipt",name: "DP Receipt" },
-  { id: "vahan",     name: "VAHAN"},
-  { id: "hsrp_vahan",name: "HSRP NO"},
-  { id: "insurance", name: "Insurance"},
-  { id: "dms",       name: "DMS Names"},
-  { id: "tally",     name: "TALLY"},
-  { id: "attendance",name: "Attendance"}
+  { id: "receipt",     name: "Receipt"     },
+  { id: "archive",     name: "Archives"    },
+  { id: "verify",      name: "Verify"      },
+  { id: "pricelist",   name: "Price List"  },
+  { id: "gatepass",    name: "Gate Pass"   },
+  { id: "dp_receipt",  name: "DP Receipt"  },
+  { id: "tools",       name: "Tools"       },
+  { id: "tally",       name: "TALLY"       },
+  { id: "attendance",  name: "Attendance"  },
+];
+
+// Pages accessible on mobile via the hamburger dropdown
+const mobilePages = [
+  { id: "receipt",    name: "Receipt",   icon: "🧾" },
+  { id: "archive",    name: "Archives",  icon: "📂" },
+  { id: "verify",     name: "Verify",    icon: "🔍" },
+  { id: "gatepass",   name: "Gate Pass", icon: "🚗" },
+  { id: "dp_receipt", name: "DP Receipt",icon: "💳" },
+  { id: "attendance", name: "Attendance",icon: "📅" },
+  { id: "pricelist",  name: "Price List",icon: "📄" },
 ];
 
 const Navbar = ({
@@ -385,7 +371,16 @@ const Navbar = ({
   const scrollRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft]   = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen]         = useState(false);
+  const [isMobile, setIsMobile]             = useState(window.innerWidth < 1024);
+  const menuRef = useRef(null);
+
+  // Track mobile vs desktop
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 1024);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const checkScroll = () => {
     const el = scrollRef.current;
@@ -403,8 +398,23 @@ const Navbar = ({
     return () => { el?.removeEventListener("scroll", checkScroll); ro.disconnect(); };
   }, []);
 
+  useEffect(() => {
+    const handle = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setIsMenuOpen(false);
+      }
+    };
+    if (isMenuOpen) document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [isMenuOpen]);
+
   const scroll = (dir) => {
     scrollRef.current?.scrollBy({ left: dir * 160, behavior: "smooth" });
+  };
+
+  const navigate = (pageId) => {
+    setActivePage(pageId);
+    setIsMenuOpen(false);
   };
 
   return (
@@ -412,16 +422,14 @@ const Navbar = ({
       <NavbarStyle />
       <nav className={`nb-root ${mode}`}>
 
-        {/* Brand */}
+        {/* Brand — text only, no icon */}
         <div className="nb-brand">
-          <span className="nb-brand-text" style={{ display: "none" }}>
+          <span className="nb-brand-text">
             Value<span>One</span>
           </span>
-          {/* Show text on wider screens via inline media trick */}
-          <style>{`@media(min-width:1024px){.nb-brand-text{display:block!important}}`}</style>
         </div>
 
-        {/* Scrollable nav */}
+        {/* Scrollable nav — desktop only */}
         <div className="nb-nav-wrap">
           {canScrollLeft && (
             <>
@@ -433,18 +441,15 @@ const Navbar = ({
           )}
 
           <div className="nb-nav-scroll" ref={scrollRef}>
-            {pages.map((page) => {
-              const isActive = activePage === page.id;
-              return (
-                <button
-                  key={page.id}
-                  onClick={() => setActivePage(page.id)}
-                  className={`nb-item${isActive ? " active" : ""}`}
-                >
-                  {page.name}
-                </button>
-              );
-            })}
+            {pages.map((page) => (
+              <button
+                key={page.id}
+                onClick={() => setActivePage(page.id)}
+                className={`nb-item${activePage === page.id ? " active" : ""}`}
+              >
+                {page.name}
+              </button>
+            ))}
           </div>
 
           {canScrollRight && (
@@ -459,7 +464,7 @@ const Navbar = ({
 
         {/* Action bar */}
         <div className="nb-actions">
-
+          {/* Calculator — desktop only (hidden via CSS on mobile) */}
           <button
             onClick={toggleCalculator}
             data-tip="Calculator"
@@ -478,51 +483,85 @@ const Navbar = ({
 
           <div className="nb-divider" />
 
-          {/* Burger Menu for User Actions */}
-          <div className="nb-menu-wrapper">
+          {/* Burger Menu */}
+          <div className="nb-menu-wrapper" ref={menuRef}>
             <button
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              onClick={() => setIsMenuOpen(v => !v)}
               data-tip="Menu"
               className="nb-action-btn"
+              aria-label="Open menu"
             >
               <Menu size={18} />
             </button>
 
             {isMenuOpen && (
               <div className="nb-dropdown">
+
+                {/* ── MOBILE NAVIGATION SECTION ── */}
+                {isMobile && (
+                  <>
+                    <div className="nb-dropdown-section-label">Navigate</div>
+                    {mobilePages.map(p => (
+                      <button
+                        key={p.id}
+                        className={`nb-dropdown-btn${activePage === p.id ? " active" : ""}`}
+                        onClick={() => navigate(p.id)}
+                      >
+                        <span style={{ fontSize: 15, lineHeight: 1 }}>{p.icon}</span>
+                        {p.name}
+                      </button>
+                    ))}
+                    <div className="nb-dropdown-divider" />
+                  </>
+                )}
+
+                {/* ── ADMIN SECTION ── */}
+                {userRole === "admin" && (
+                  <>
+                    <div className="nb-dropdown-section-label">Admin</div>
+                    <button
+                      className={`nb-dropdown-btn${activePage === "admin" ? " active" : ""}`}
+                      onClick={() => navigate("admin")}
+                    >
+                      <Shield size={16} /> Admin Panel
+                    </button>
+                    <button
+                      className={`nb-dropdown-btn${activePage === "audit" ? " active" : ""}`}
+                      onClick={() => navigate("audit")}
+                    >
+                      <History size={16} /> Audit Log
+                    </button>
+                    <div className="nb-dropdown-divider" />
+                  </>
+                )}
+
+                {/* ── GENERAL SECTION ── */}
                 <button
                   className={`nb-dropdown-btn${activePage === "info" ? " active" : ""}`}
-                  onClick={() => { setActivePage("info"); setIsMenuOpen(false); }}
+                  onClick={() => navigate("info")}
                 >
                   <Info size={16} /> Info & Docs
                 </button>
 
-                {userRole === "admin" && (
-                  <button
-                    className={`nb-dropdown-btn${activePage === "admin" ? " active" : ""}`}
-                    onClick={() => { setActivePage("admin"); setIsMenuOpen(false); }}
-                  >
-                    <Shield size={16} /> Admin Panel
-                  </button>
-                )}
-                
                 <button
                   className={`nb-dropdown-btn${activePage === "profile" ? " active" : ""}`}
-                  onClick={() => { setActivePage("profile"); setIsMenuOpen(false); }}
+                  onClick={() => navigate("profile")}
                 >
                   <UserCircle size={16} /> Profile
                 </button>
-                
+
+                <div className="nb-dropdown-divider" />
+
                 <button
                   className="nb-dropdown-btn logout"
                   onClick={() => { onLogout(); setIsMenuOpen(false); }}
                 >
                   <LogOut size={16} /> Logout
                 </button>
+
               </div>
             )}
           </div>
-
         </div>
       </nav>
     </>

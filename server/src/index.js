@@ -14,6 +14,8 @@ import generalReceiptRoutes from './routes/general_receipts.js';
 import adminRoutes from './routes/admin.js'; 
 import pricelistRoutes from './routes/pricelist.js';
 import portalRoutes from './routes/portal.js';
+import auditLogRoutes from './routes/audit_log.js';
+import qrRoutes from './routes/qr.js';
 
 import { verifyToken, checkRole } from './middleware/auth.js';
 
@@ -22,7 +24,6 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 5000;
 
-// Allow multiple origins for CORS (Main Client + External Portal)
 const allowedOrigins = [
   process.env.CLIENT_URL,
   process.env.PORTAL_URL 
@@ -30,7 +31,6 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl requests) or allowed origins
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -54,11 +54,18 @@ app.use('/api/attendance', verifyToken, attendanceRoutes);
 app.use('/api/general-receipts', verifyToken, generalReceiptRoutes);
 app.use('/api/pricelist', verifyToken, pricelistRoutes);
 
+// Audit log: requires auth. Per-receipt history (GET /:receipt_no) and writes
+// (POST /) are available to all authenticated users; the full cross-receipt
+// log (GET /) is gated to admins INSIDE the router itself.
+app.use('/api/audit-log', verifyToken, auditLogRoutes);
+
 // External Portal Read-Only Route
 app.use('/api/portal', verifyToken, portalRoutes);
 
 // Admin Routes (Protected + Role Check)
 app.use('/api/admin', verifyToken, checkRole('admin'), adminRoutes);
+
+app.use('/api/qr', verifyToken, qrRoutes);
 
 // Health Check
 app.get('/', async (req, res) => {

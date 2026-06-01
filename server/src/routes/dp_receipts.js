@@ -6,21 +6,16 @@ const router = express.Router();
 // Get Next DP Receipt Number
 router.get('/next', async (req, res) => {
   try {
-    // Check if sequence is called to avoid returning 2 when it's reset to 1
     const seqResult = await pool.query("SELECT last_value, is_called FROM dp_receipts_receipt_no_seq");
     const { last_value, is_called } = seqResult.rows[0];
-    
-    // If a sequence was just restarted via ALTER SEQUENCE, is_called is false, meaning the next value is last_value (1)
     const nextNo = is_called ? parseInt(last_value) + 1 : parseInt(last_value);
-    
     res.json({ nextNo });
   } catch (err) {
-    // Fallback if the is_called column check fails
     try {
-        const result = await pool.query("SELECT last_value + 1 as next_no FROM dp_receipts_receipt_no_seq");
-        res.json({ nextNo: parseInt(result.rows[0].next_no) });
+      const result = await pool.query("SELECT last_value + 1 as next_no FROM dp_receipts_receipt_no_seq");
+      res.json({ nextNo: parseInt(result.rows[0].next_no) });
     } catch (fallbackErr) {
-        res.status(500).json({ error: fallbackErr.message });
+      res.status(500).json({ error: fallbackErr.message });
     }
   }
 });
@@ -36,6 +31,8 @@ router.get('/months', async (req, res) => {
 });
 
 // Save DP Receipt
+// Uses ON CONFLICT DO UPDATE so that duplicate receipt numbers (from manual sequence
+// resets) never cause a database error. The latest data always wins.
 router.post('/', async (req, res) => {
   let { receiptNo, date, customer_name, amount, payment_mode, hp_financier, model } = req.body;
   if (amount === '' || amount === undefined || amount === null) amount = 0;
@@ -43,21 +40,31 @@ router.post('/', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
-    // We are now explicitly inserting the receipt_no provided by the frontend
+
     const result = await client.query(
       `INSERT INTO dp_receipts 
-      (receipt_no, date, customer_name, amount, payment_mode, hp_financier, model)
-      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING receipt_no`,
+        (receipt_no, date, customer_name, amount, payment_mode, hp_financier, model)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (receipt_no) DO UPDATE SET
+         date          = EXCLUDED.date,
+         customer_name = EXCLUDED.customer_name,
+         amount        = EXCLUDED.amount,
+         payment_mode  = EXCLUDED.payment_mode,
+         hp_financier  = EXCLUDED.hp_financier,
+         model         = EXCLUDED.model
+       RETURNING receipt_no`,
       [receiptNo, date, customer_name, amount, payment_mode, hp_financier, model]
     );
-    
-    // Automatically advance sequence if user manually typed a high number so the auto-number doesn't conflict later
-    await client.query(`SELECT setval('dp_receipts_receipt_no_seq', GREATEST((SELECT last_value FROM dp_receipts_receipt_no_seq), $1::bigint), true)`, [receiptNo]);
+
+    // Advance sequence if user manually typed a number higher than current seq
+    await client.query(
+      `SELECT setval('dp_receipts_receipt_no_seq', GREATEST((SELECT last_value FROM dp_receipts_receipt_no_seq), $1::bigint), true)`,
+      [receiptNo]
+    );
 
     // Auto cleanup data older than 2 years
     await client.query("DELETE FROM dp_receipts WHERE date < NOW() - INTERVAL '2 years'");
-    
+
     await client.query('COMMIT');
     res.json({ success: true, receiptNo: result.rows[0].receipt_no });
   } catch (err) {
@@ -77,7 +84,7 @@ router.put('/:receipt_no', async (req, res) => {
     await pool.query(
       `UPDATE dp_receipts SET 
         date = $1, customer_name = $2, amount = $3, payment_mode = $4, hp_financier = $5, model = $6
-      WHERE receipt_no = $7`,
+       WHERE receipt_no = $7`,
       [date, customer_name, amount, payment_mode, hp_financier, model, receipt_no]
     );
     res.json({ success: true, message: "Receipt updated" });
@@ -89,14 +96,14 @@ router.put('/:receipt_no', async (req, res) => {
 // Delete DP Receipt
 router.delete('/:receipt_no', async (req, res) => {
   const { receipt_no } = req.params;
-
   try {
-    const result = await pool.query(`DELETE FROM dp_receipts WHERE receipt_no = $1 RETURNING receipt_no`, [receipt_no]);
-    
+    const result = await pool.query(
+      `DELETE FROM dp_receipts WHERE receipt_no = $1 RETURNING receipt_no`,
+      [receipt_no]
+    );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "Receipt not found" });
     }
-    
     res.json({ success: true, message: "Receipt deleted successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -110,12 +117,11 @@ router.get('/list', async (req, res) => {
     let query = "SELECT * FROM dp_receipts";
     let params = [];
 
-    // ORDER BY date DESC ensures that newest entries stay at the top, even if receipt numbers are reset
     if (month) {
       query += " WHERE to_char(date, 'YYYY-MM') = $1 ORDER BY date DESC, receipt_no DESC";
       params.push(month);
     } else {
-      query += " ORDER BY date DESC, receipt_no DESC LIMIT 500";
+      query += " ORDER BY date DESC, receipt_no DESC";
     }
 
     const result = await pool.query(query, params);

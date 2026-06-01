@@ -2,9 +2,23 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { pool } from '../config/db.js';
-import { verifyToken } from '../middleware/auth.js'; 
+import { verifyToken } from '../middleware/auth.js';
 
 const router = express.Router();
+
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Cookies must be secure + cross-site in production (split client/server origins
+// behind HTTPS), but over plain http://localhost in development the browser
+// silently drops a cookie marked secure/SameSite=None — which made local login
+// appear to "succeed" yet never persist the session. Gate the flags on the
+// environment. `secure` and `sameSite` must match between cookie() and
+// clearCookie() or the browser won't clear it on logout, so both share this.
+const cookieOptions = {
+  httpOnly: true,
+  secure:   isProduction,
+  sameSite: isProduction ? 'none' : 'lax',
+};
 
 // LOGIN
 router.post('/login', async (req, res) => {
@@ -19,17 +33,15 @@ router.post('/login', async (req, res) => {
 
     // 1. Set JWT Token to expire in exactly 9 hours
     const token = jwt.sign(
-      { id: user.id, role: user.role, email: user.email }, 
-      process.env.JWT_SECRET, 
-      { expiresIn: '9h' } 
+      { id: user.id, role: user.role, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '9h' }
     );
 
     // 2. Set HTTP-Only Cookie to expire in exactly 9 hours (in milliseconds)
     res.cookie('token', token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      maxAge: 9 * 60 * 60 * 1000 
+      ...cookieOptions,
+      maxAge: 9 * 60 * 60 * 1000,
     });
 
     res.json({ role: user.role, email: user.email, username: user.username });
@@ -52,7 +64,7 @@ router.put('/update-profile', verifyToken, async (req, res) => {
 
     let query = 'UPDATE users SET email = $1';
     let params = [newEmail];
-    
+
     if (newPassword) {
       const salt = await bcrypt.genSalt(10);
       const hash = await bcrypt.hash(newPassword, salt);
@@ -72,20 +84,22 @@ router.put('/update-profile', verifyToken, async (req, res) => {
 
 // LOGOUT
 router.post('/logout', (req, res) => {
-  res.clearCookie('token', { httpOnly: true, secure: true, sameSite: 'none' });
+  // Flags must match those used when the cookie was set, or the browser
+  // refuses to clear it.
+  res.clearCookie('token', cookieOptions);
   res.json({ message: 'Logged out' });
 });
 
-// NEW: Get Portal Credentials (Authenticated Users Only)
+// Get Portal Credentials (Authenticated Users Only)
 router.get('/portal-creds', verifyToken, async (req, res) => {
-    try {
-        const result = await pool.query("SELECT key, value FROM app_settings WHERE key IN ('portal_email', 'portal_password')");
-        const creds = {};
-        result.rows.forEach(r => creds[r.key] = r.value);
-        res.json(creds);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+  try {
+    const result = await pool.query("SELECT key, value FROM app_settings WHERE key IN ('portal_email', 'portal_password')");
+    const creds = {};
+    result.rows.forEach(r => creds[r.key] = r.value);
+    res.json(creds);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;
