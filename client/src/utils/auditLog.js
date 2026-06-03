@@ -1,24 +1,16 @@
 const API_URL = import.meta.env.VITE_API_URL;
 
 /**
- * Write a CREATED audit entry.
+ * Creation is no longer logged as a stored audit row. The "Receipt created on
+ * {date}" entry shown in the UI is synthesized on read from the receipt's own
+ * date (see GET /api/audit-log/:receipt_no on the server). Kept as a no-op so
+ * existing callers (Receipt.jsx) don't need to change and no CREATED rows are
+ * ever written.
  * @param {number|string} receiptNo
- * @param {object} fields - all fields of the new receipt
+ * @param {object} fields - all fields of the new receipt (unused)
  */
 export async function logCreated(receiptNo, fields) {
-    try {
-        await fetch(`${API_URL}/audit-log`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                receipt_no: receiptNo,
-                action: 'CREATED',
-                changed_fields: fields,
-            }),
-        });
-    } catch (e) {
-        console.warn('Audit log write failed (CREATED):', e.message);
-    }
+    return; // intentionally does nothing — creation is derived from receipt date
 }
 
 /**
