@@ -209,10 +209,20 @@ router.post('/', async (req, res) => {
       console.warn("Sequence update skipped:", seqErr.message);
     }
 
-    // Rolling 7-year cleanup
-    await client.query(
-      "DELETE FROM general_receipts WHERE date < NOW() - INTERVAL '7 years'"
+    // Rolling 7-year cleanup — also purge audit-log rows for the pruned
+    // receipts so the audit entries never outlive their parent receipt.
+    // DELETE ... RETURNING gives us exactly the receipt numbers removed, so the
+    // audit cleanup is scoped precisely and runs in the same transaction.
+    const pruned = await client.query(
+      "DELETE FROM general_receipts WHERE date < NOW() - INTERVAL '7 years' RETURNING receipt_no"
     );
+    if (pruned.rows.length > 0) {
+      const prunedNos = pruned.rows.map(r => r.receipt_no);
+      await client.query(
+        'DELETE FROM receipt_audit_log WHERE receipt_no = ANY($1::bigint[])',
+        [prunedNos]
+      );
+    }
 
     await client.query('COMMIT');
     res.json({ success: true, receiptNo: receipt_no });
