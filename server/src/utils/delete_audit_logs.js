@@ -1,21 +1,17 @@
-// ============================================================
-// FILE: server/src/utils/delete_audit_logs.js
-//
 // TERMINAL-ONLY utility to delete receipt audit log entries.
 // NOT exposed via any API route.
+// Run with:  node src/utils/delete_audit_logs.js
 //
-// Usage:
-//   node src/utils/delete_audit_logs.js --from 2024-01-01 --to 2024-03-31
-//   node src/utils/delete_audit_logs.js --all
-//   node src/utils/delete_audit_logs.js --from 2024-01-01 --to 2024-03-31 --dry-run
-//   node src/utils/delete_audit_logs.js --all --confirm
+// ── How the targeting works ─────────────────────────────────────────────────
+//   RECEIPTS + DATE  → delete logs for those receipt(s) recorded on that date
+//   RECEIPTS only    → delete ALL logs for those receipt(s) (date ignored)
+//   DATE only        → delete ALL logs recorded on that date
+//   MULTIPLE RECEIPTS→ date is ALWAYS ignored; deletes all logs of those receipts
 //
-// Options:
-//   --from      Start date (YYYY-MM-DD), inclusive. Required unless --all.
-//   --to        End date   (YYYY-MM-DD), inclusive. Required unless --all.
-//   --all       Delete ALL audit log entries (ignores --from/--to).
-//   --dry-run   Count rows that would be deleted; make no changes.
-//   --confirm   Skip interactive confirmation prompt.
+// Notes:
+//   • DATE matches changed_at (when the log was written), not the receipt date.
+//   • Set DRY_RUN = true to preview without deleting.
+//   • Set SKIP_CONFIRM = true to delete without the typed "DELETE" prompt.
 // ============================================================
 
 import dotenv from 'dotenv';
@@ -23,6 +19,28 @@ import pg from 'pg';
 import path from 'path';
 import readline from 'readline';
 import { fileURLToPath } from 'url';
+
+// ════════════════════════════════════════════════════════════════════════════
+//  CONFIG — EDIT THESE VALUES
+// ════════════════════════════════════════════════════════════════════════════
+
+// Receipt numbers to target. Examples:
+//   []                      → no receipt filter (use DATE only)
+//   [260211]                → a single receipt
+//   [260211, 260212, 260300]→ multiple receipts (DATE is ignored)
+const RECEIPT_NOS = [260211];
+
+// Date the log was recorded, YYYY-MM-DD, or '' for none. Examples:
+//   '2026-05-01'  → only logs written on 1 May 2026
+//   ''            → no date filter
+// IMPORTANT: ignored automatically when RECEIPT_NOS has more than one entry.
+const DATE = '2026-05-01';
+
+// Safety switches
+const DRY_RUN     = false;  // true  = preview only, no deletion
+const SKIP_CONFIRM = false; // true  = skip the typed "DELETE" prompt
+
+// ════════════════════════════════════════════════════════════════════════════
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -34,37 +52,52 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-// ── Parse CLI args ─────────────────────────────────────────────
-const args      = process.argv.slice(2);
-const getArg    = (flag) => { const i = args.indexOf(flag); return i !== -1 ? args[i + 1] : null; };
-const hasFlag   = (flag) => args.includes(flag);
-
-const fromDate    = getArg('--from');
-const toDate      = getArg('--to');
-const deleteAll   = hasFlag('--all');
-const isDryRun    = hasFlag('--dry-run');
-const skipConfirm = hasFlag('--confirm');
-
+// ── Normalize + validate config ──────────────────────────────────────────────
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-// ── Validate ───────────────────────────────────────────────────
-if (!deleteAll && (!fromDate || !toDate)) {
-  console.error('\n❌  Provide either --all, or both --from and --to.\n');
-  console.error('Examples:');
-  console.error('  node src/utils/delete_audit_logs.js --from 2024-01-01 --to 2024-03-31');
-  console.error('  node src/utils/delete_audit_logs.js --all\n');
+// Clean the receipt list: keep only valid integers
+const receipts = (Array.isArray(RECEIPT_NOS) ? RECEIPT_NOS : [])
+  .map(r => parseInt(r, 10))
+  .filter(r => !isNaN(r));
+
+const dateGiven = typeof DATE === 'string' && DATE.trim() !== '';
+if (dateGiven && !DATE_RE.test(DATE.trim())) {
+  console.error(`❌  DATE must be in YYYY-MM-DD format (got "${DATE}").`);
+  process.exit(1);
+}
+const dateVal = dateGiven ? DATE.trim() : null;
+
+if (receipts.length === 0 && !dateVal) {
+  console.error('\n❌  Nothing to target. Set RECEIPT_NOS, or DATE, or both, in the CONFIG block.\n');
   process.exit(1);
 }
 
-if (!deleteAll) {
-  if (!DATE_RE.test(fromDate) || !DATE_RE.test(toDate)) {
-    console.error('❌  Dates must be in YYYY-MM-DD format.');
-    process.exit(1);
-  }
-  if (fromDate > toDate) {
-    console.error('❌  --from must be on or before --to.');
-    process.exit(1);
-  }
+// Decide effective mode. Multiple receipts ALWAYS ignore the date.
+const multipleReceipts = receipts.length > 1;
+const useDate = dateVal && !multipleReceipts;
+
+// Build a human-readable scope label + the SQL WHERE clause + params.
+let scopeLabel;
+let whereClause;
+let params;
+
+if (receipts.length > 0 && useDate) {
+  // Single receipt + date
+  scopeLabel  = `Receipt #${receipts[0]} · logs recorded on ${dateVal}`;
+  whereClause = 'WHERE receipt_no = $1 AND changed_at::date = $2';
+  params      = [receipts[0], dateVal];
+} else if (receipts.length > 0) {
+  // One or more receipts, no date (date dropped if multiple)
+  scopeLabel = receipts.length === 1
+    ? `Receipt #${receipts[0]} · ALL logs`
+    : `Receipts ${receipts.map(r => `#${r}`).join(', ')} · ALL logs (date ignored)`;
+  whereClause = 'WHERE receipt_no = ANY($1)';
+  params      = [receipts];
+} else {
+  // Date only
+  scopeLabel  = `ALL receipts · logs recorded on ${dateVal}`;
+  whereClause = 'WHERE changed_at::date = $1';
+  params      = [dateVal];
 }
 
 // ── DB pool ────────────────────────────────────────────────────
@@ -86,26 +119,19 @@ function prompt(question) {
 const run = async () => {
   const client = await pool.connect();
 
-  const rangeLabel = deleteAll ? 'ALL ENTRIES' : `${fromDate}  →  ${toDate}`;
-
   console.log('\n══════════════════════════════════════════════════════');
   console.log('  VALUE SUZUKI — AUDIT LOG DELETION UTILITY');
   console.log('══════════════════════════════════════════════════════');
-  console.log(`  Scope  : ${rangeLabel}`);
-  console.log(`  Mode   : ${isDryRun ? '🔍 DRY RUN (no changes)' : '🗑️  LIVE DELETE'}`);
+  console.log(`  Scope  : ${scopeLabel}`);
+  console.log(`  Mode   : ${DRY_RUN ? '🔍 DRY RUN (no changes)' : '🗑️  LIVE DELETE'}`);
   console.log('══════════════════════════════════════════════════════\n');
 
   try {
     // Count affected rows
-    let countRes;
-    if (deleteAll) {
-      countRes = await client.query('SELECT COUNT(*) FROM receipt_audit_log');
-    } else {
-      countRes = await client.query(
-        'SELECT COUNT(*) FROM receipt_audit_log WHERE changed_at::date >= $1 AND changed_at::date <= $2',
-        [fromDate, toDate]
-      );
-    }
+    const countRes = await client.query(
+      `SELECT COUNT(*) FROM receipt_audit_log ${whereClause}`,
+      params
+    );
     const count = parseInt(countRes.rows[0].count, 10);
 
     if (count === 0) {
@@ -114,21 +140,13 @@ const run = async () => {
     }
 
     // Show preview
-    let previewRes;
-    if (deleteAll) {
-      previewRes = await client.query(
-        `SELECT id, receipt_no, action, changed_by_email, changed_at
-         FROM receipt_audit_log ORDER BY changed_at DESC LIMIT 10`
-      );
-    } else {
-      previewRes = await client.query(
-        `SELECT id, receipt_no, action, changed_by_email, changed_at
-         FROM receipt_audit_log
-         WHERE changed_at::date >= $1 AND changed_at::date <= $2
-         ORDER BY changed_at DESC LIMIT 10`,
-        [fromDate, toDate]
-      );
-    }
+    const previewRes = await client.query(
+      `SELECT id, receipt_no, action, changed_by_email, changed_at
+       FROM receipt_audit_log
+       ${whereClause}
+       ORDER BY changed_at DESC LIMIT 10`,
+      params
+    );
 
     console.log(`📋  Found ${count} audit log entries. Preview (most recent 10):\n`);
     console.log('  ID        | Receipt # | Action    | Changed By              | Timestamp');
@@ -144,14 +162,14 @@ const run = async () => {
     if (count > 10) console.log(`  ... and ${count - 10} more.\n`);
     else console.log('');
 
-    if (isDryRun) {
+    if (DRY_RUN) {
       console.log(`✅  DRY RUN complete. ${count} audit log entries would be deleted.`);
-      console.log('    Re-run without --dry-run to perform the actual deletion.\n');
+      console.log('    Set DRY_RUN = false to perform the actual deletion.\n');
       return;
     }
 
     // Confirm
-    if (!skipConfirm) {
+    if (!SKIP_CONFIRM) {
       const answer = await prompt(
         `⚠️   About to PERMANENTLY DELETE ${count} audit log entries.\n    Type "DELETE" to confirm, or anything else to cancel: `
       );
@@ -163,15 +181,10 @@ const run = async () => {
 
     // Execute
     await client.query('BEGIN');
-    let deleteRes;
-    if (deleteAll) {
-      deleteRes = await client.query('DELETE FROM receipt_audit_log');
-    } else {
-      deleteRes = await client.query(
-        'DELETE FROM receipt_audit_log WHERE changed_at::date >= $1 AND changed_at::date <= $2',
-        [fromDate, toDate]
-      );
-    }
+    const deleteRes = await client.query(
+      `DELETE FROM receipt_audit_log ${whereClause}`,
+      params
+    );
     await client.query('COMMIT');
 
     console.log(`\n✅  Successfully deleted ${deleteRes.rowCount} audit log entries.\n`);

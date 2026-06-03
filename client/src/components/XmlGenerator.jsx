@@ -202,9 +202,12 @@ const XmlGenerator = ({ theme }) => {
             throw new Error("Please select both 'From Date' and 'To Date' to fetch data directly from the server, or upload an Excel file.");
           }
           const API_URL = import.meta.env.VITE_API_URL;
-          const res = await fetch(`${API_URL}/general-receipts/list`, { credentials: 'include' });
+          const res = await fetch(`${API_URL}/general-receipts/list/all`, { credentials: 'include' });
           if (!res.ok) throw new Error("Failed to fetch receipts from server.");
-          const history = await res.json();
+          const raw = await res.json();
+
+          // Normalize: endpoint may return an array or an object wrapping rows
+          const history = Array.isArray(raw) ? raw : (raw.rows || []);
 
           let historyData = history;
           if (currentData.fromDate && currentData.toDate) {
