@@ -62,22 +62,26 @@ function App() {
     return localStorage.getItem("theme") || "light";
   });
 
+  // Allowed public pages
+  const publicPages = ['login', 'pricelist', 'dp_receipt', 'tools', 'attendance'];
+
   const [activePage, setActivePage] = useState(() => {
-    return localStorage.getItem("activePage") || "receipt";
+    const saved = localStorage.getItem("activePage") || "login";
+    const isAuth = localStorage.getItem("isLoggedIn") === "true";
+    
+    if (!isAuth && !publicPages.includes(saved)) return 'login';
+    if (isAuth && saved === 'login') return 'receipt';
+    return saved;
   });
 
   const [isCalcOpen, setIsCalcOpen] = useState(() => {
     return localStorage.getItem("isCalcOpen") === "true";
   });
 
-  // For QR scan deep-link: when a QR is scanned on mobile, we navigate to
-  // archive and pass the receipt number so ArchivePage can auto-select it.
   const [qrScanTarget, setQrScanTarget] = useState(null);
-
   const [loginMessage, setLoginMessage] = useState("");
   const isDark = theme === "dark";
 
-  // --- GLOBAL TOAST SYSTEM ---
   const [toasts, setToasts] = useState([]);
 
   useEffect(() => {
@@ -90,8 +94,6 @@ function App() {
     };
   }, []);
 
-  // Global QR scan navigation: Receipt.jsx calls this when a QR is verified
-  // on mobile and the user should be taken to the archive view for that receipt.
   useEffect(() => {
     window.navigateToArchiveReceipt = (receiptNo) => {
       setQrScanTarget(receiptNo);
@@ -104,6 +106,13 @@ function App() {
   useEffect(() => { localStorage.setItem("activePage", activePage); }, [activePage]);
   useEffect(() => { localStorage.setItem("isCalcOpen", isCalcOpen); }, [isCalcOpen]);
 
+  // Route Guarding Effect
+  useEffect(() => {
+    if (!isAuthenticated && !publicPages.includes(activePage)) {
+      setActivePage('login');
+    }
+  }, [isAuthenticated, activePage]);
+
   useEffect(() => {
     const handleSessionExpiry = () => {
       if (localStorage.getItem("isLoggedIn") === "true") {
@@ -112,30 +121,27 @@ function App() {
         setUserRole("user");
         setLoginMessage("Your session has expired. Please log in again.");
         setIsAuthenticated(false);
+        setActivePage("login");
       }
     };
     window.addEventListener('auth:session-expired', handleSessionExpiry);
     return () => window.removeEventListener('auth:session-expired', handleSessionExpiry);
   }, []);
 
-  // ── Mobile layout: allow receipt + archive pages, block desktop-only pages ──
-  // We no longer force a single page on mobile — receipt and archive both work.
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 1024) {
-        // On mobile only block the calculator sidebar
         setIsCalcOpen(false);
-        // If currently on a desktop-only page, redirect to receipt
-        const mobileAllowed = ['receipt', 'archive', 'verify', 'gatepass', 'dp_receipt', 'pricelist', 'attendance', 'info', 'profile', 'admin', 'audit'];
+        const mobileAllowed = ['login', 'receipt', 'archive', 'verify', 'gatepass', 'dp_receipt', 'pricelist', 'attendance', 'info', 'profile', 'admin', 'audit'];
         if (!mobileAllowed.includes(activePage)) {
-          setActivePage("receipt");
+          setActivePage(isAuthenticated ? "receipt" : "login");
         }
       }
     };
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [activePage]);
+  }, [activePage, isAuthenticated]);
 
   const toggleTheme      = () => setTheme(isDark ? "light" : "dark");
   const toggleCalculator = () => setIsCalcOpen(v => !v);
@@ -147,6 +153,7 @@ function App() {
     setUserRole(role);
     setLoginMessage("");
     setIsAuthenticated(true);
+    setActivePage("receipt");
   };
 
   const handleLogout = async () => {
@@ -160,12 +167,9 @@ function App() {
       setLoginMessage("");
       setIsAuthenticated(false);
       setUserRole("user");
+      setActivePage("login");
     }
   };
-
-  if (!isAuthenticated) {
-    return <Login onLogin={handleLogin} initialError={loginMessage} />;
-  }
 
   return (
     <div className={`h-screen w-screen overflow-hidden flex flex-col transition-colors duration-300 ${isDark ? "bg-gray-900" : "bg-blue-50"}`}>
@@ -190,35 +194,64 @@ function App() {
           userRole={userRole}
           isCalcOpen={isCalcOpen}
           toggleCalculator={toggleCalculator}
+          isAuthenticated={isAuthenticated}
         />
       </div>
 
       <div className="flex-1 w-full relative flex overflow-hidden">
         <div className="flex-1 relative overflow-hidden">
 
-          <div className={`absolute inset-0 overflow-y-auto ${activePage === "receipt" ? "block" : "hidden"}`}>
-            <Receipt theme={theme} />
+          <div className={`absolute inset-0 overflow-y-auto ${activePage === "login" ? "block" : "hidden"}`}>
+            <Login onLogin={handleLogin} initialError={loginMessage} />
           </div>
 
-          {/* Archive page: now available on mobile too */}
-          <div className={`absolute inset-0 overflow-hidden ${activePage === "archive" ? "block" : "hidden"}`}>
-            <ArchivePage
-              theme={theme}
-              initialScanTarget={qrScanTarget}
-              onScanTargetConsumed={() => setQrScanTarget(null)}
-            />
-          </div>
+          {isAuthenticated && (
+            <>
+              <div className={`absolute inset-0 overflow-y-auto ${activePage === "receipt" ? "block" : "hidden"}`}>
+                <Receipt theme={theme} />
+              </div>
 
-          <div className={`absolute inset-0 overflow-y-auto ${activePage === "verify" ? "block" : "hidden"}`}>
-            <Verify theme={theme} />
-          </div>
+              <div className={`absolute inset-0 overflow-hidden ${activePage === "archive" ? "block" : "hidden"}`}>
+                <ArchivePage
+                  theme={theme}
+                  initialScanTarget={qrScanTarget}
+                  onScanTargetConsumed={() => setQrScanTarget(null)}
+                />
+              </div>
 
+              <div className={`absolute inset-0 overflow-y-auto ${activePage === "verify" ? "block" : "hidden"}`}>
+                <Verify theme={theme} />
+              </div>
+
+              <div className={`absolute inset-0 overflow-y-auto ${activePage === "gatepass" ? "block" : "hidden"}`}>
+                <SuzukiGatePass theme={theme} />
+              </div>
+
+              <div className={`absolute inset-0 overflow-y-auto ${activePage === "tally" ? "block" : "hidden"}`}>
+                <XmlGenerator theme={theme} />
+              </div>
+
+              <div className={`absolute inset-0 overflow-y-auto ${activePage === "info" ? "block" : "hidden"}`}>
+                <InfoPage theme={theme} />
+              </div>
+
+              <div className={`absolute inset-0 overflow-y-auto ${activePage === "profile" ? "block" : "hidden"}`}>
+                <UserProfile theme={theme} />
+              </div>
+
+              <div className={`absolute inset-0 overflow-y-auto ${activePage === "admin" ? "block" : "hidden"}`}>
+                {userRole === 'admin' && <AdminPanel theme={theme} />}
+              </div>
+
+              <div className={`absolute inset-0 overflow-y-auto ${activePage === "audit" ? "block" : "hidden"}`}>
+                {userRole === 'admin' && <AuditLogPage theme={theme} />}
+              </div>
+            </>
+          )}
+
+          {/* Public Views */}
           <div className={`absolute inset-0 overflow-hidden ${activePage === "pricelist" ? "block" : "hidden"}`}>
             <PriceList theme={theme} isActive={activePage === "pricelist"} />
-          </div>
-
-          <div className={`absolute inset-0 overflow-y-auto ${activePage === "gatepass" ? "block" : "hidden"}`}>
-            <SuzukiGatePass theme={theme} />
           </div>
 
           <div className={`absolute inset-0 overflow-y-auto ${activePage === "dp_receipt" ? "block" : "hidden"}`}>
@@ -229,28 +262,8 @@ function App() {
             <ToolsPage theme={theme} />
           </div>
 
-          <div className={`absolute inset-0 overflow-y-auto ${activePage === "tally" ? "block" : "hidden"}`}>
-            <XmlGenerator theme={theme} />
-          </div>
-
           <div className={`absolute inset-0 overflow-y-auto ${activePage === "attendance" ? "block" : "hidden"}`}>
             <AttendanceApp theme={theme} />
-          </div>
-
-          <div className={`absolute inset-0 overflow-y-auto ${activePage === "info" ? "block" : "hidden"}`}>
-            <InfoPage theme={theme} />
-          </div>
-
-          <div className={`absolute inset-0 overflow-y-auto ${activePage === "profile" ? "block" : "hidden"}`}>
-            <UserProfile theme={theme} />
-          </div>
-
-          <div className={`absolute inset-0 overflow-y-auto ${activePage === "admin" ? "block" : "hidden"}`}>
-            {userRole === 'admin' && <AdminPanel theme={theme} />}
-          </div>
-
-          <div className={`absolute inset-0 overflow-y-auto ${activePage === "audit" ? "block" : "hidden"}`}>
-            {userRole === 'admin' && <AuditLogPage theme={theme} />}
           </div>
 
         </div>

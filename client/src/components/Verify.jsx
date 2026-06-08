@@ -146,7 +146,9 @@ const fmtAuditTime = (ist) => {
 };
 
 // ── ReceiptDetailRow — expandable row in the receipt history table ─────────────
-const ReceiptDetailRow = ({ h, isDark, apiUrl }) => {
+// The audit log within this row is only fetched and shown for admins; the
+// isAdmin flag is threaded down from the parent Verify component.
+const ReceiptDetailRow = ({ h, isDark, isAdmin, apiUrl }) => {
   const [open, setOpen]           = useState(false);
   const [auditLogs, setAuditLogs] = useState([]);
   const [loadingAudit, setLoadingAudit] = useState(false);
@@ -173,7 +175,8 @@ const ReceiptDetailRow = ({ h, isDark, apiUrl }) => {
   const handleToggle = () => {
     const next = !open;
     setOpen(next);
-    if (next && !auditFetched) fetchAudit();
+    // Only admins ever trigger an audit-log fetch.
+    if (next && isAdmin && !auditFetched) fetchAudit();
   };
 
   const isCancelled = h.status === 'CANCELLED';
@@ -226,7 +229,7 @@ const ReceiptDetailRow = ({ h, isDark, apiUrl }) => {
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(3, 1fr)',
-                borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
+                borderBottom: isAdmin ? `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` : undefined,
               }}>
                 {[
                   ['Receipt No',    `#${h.receipt_no}`,                             false],
@@ -273,113 +276,115 @@ const ReceiptDetailRow = ({ h, isDark, apiUrl }) => {
                 ))}
               </div>
 
-              {/* Audit log section */}
-              <div style={{ padding: '12px 14px' }}>
-                <div style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.6px',
-                  color: 'var(--text-muted)',
-                  marginBottom: 10,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}>
-                  <span>📋</span> Audit Log
-                </div>
-
-                {loadingAudit ? (
-                  <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--text-muted)', fontSize: 12 }}>
-                    Loading…
+              {/* Audit log section — admin only */}
+              {isAdmin && (
+                <div style={{ padding: '12px 14px' }}>
+                  <div style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.6px',
+                    color: 'var(--text-muted)',
+                    marginBottom: 10,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}>
+                    <span>📋</span> Audit Log
                   </div>
-                ) : auditLogs.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '10px 0', color: 'var(--text-muted)', fontSize: 12, fontStyle: 'italic' }}>
-                    No audit entries for this receipt.
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {auditLogs.map((log, i) => {
-                      let fields = {};
-                      try {
-                        fields = typeof log.changed_fields === 'string'
-                          ? JSON.parse(log.changed_fields)
-                          : (log.changed_fields || {});
-                      } catch {}
-                      const isCreated  = log.action === 'CREATED';
-                      const entries    = isCreated ? [] : Object.entries(fields);
-                      const actionColor =
-                        log.action === 'CREATED'   ? '#10b981' :
-                        ['CANCELLED','DELETED','BULK_DELETED'].includes(log.action) ? '#ef4444' :
-                        '#4f63f0';
 
-                      return (
-                        <div
-                          key={log.id || i}
-                          style={{
-                            borderRadius: 8,
-                            border: `1px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'}`,
-                            background: isDark ? 'rgba(255,255,255,0.03)' : 'white',
-                            padding: '8px 12px',
-                            fontSize: 11,
-                          }}
-                        >
-                          {/* Row: badge + timestamp */}
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5, flexWrap: 'wrap' }}>
-                            <span style={{
-                              fontSize: 9,
-                              fontWeight: 800,
-                              padding: '2px 8px',
-                              borderRadius: 4,
-                              background: `${actionColor}18`,
-                              color: actionColor,
-                              border: `1px solid ${actionColor}30`,
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.4px',
-                            }}>
-                              {log.action}
-                            </span>
-                            <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: 'var(--text-muted)' }}>
-                              {fmtAuditTime(log.changed_at_ist)} IST
-                            </span>
-                          </div>
+                  {loadingAudit ? (
+                    <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--text-muted)', fontSize: 12 }}>
+                      Loading…
+                    </div>
+                  ) : auditLogs.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '10px 0', color: 'var(--text-muted)', fontSize: 12, fontStyle: 'italic' }}>
+                      No audit entries for this receipt.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {auditLogs.map((log, i) => {
+                        let fields = {};
+                        try {
+                          fields = typeof log.changed_fields === 'string'
+                            ? JSON.parse(log.changed_fields)
+                            : (log.changed_fields || {});
+                        } catch {}
+                        const isCreated  = log.action === 'CREATED';
+                        const entries    = isCreated ? [] : Object.entries(fields);
+                        const actionColor =
+                          log.action === 'CREATED'   ? '#10b981' :
+                          ['CANCELLED','DELETED','BULK_DELETED'].includes(log.action) ? '#ef4444' :
+                          '#4f63f0';
 
-                          {/* Changed by */}
-                          <div style={{ color: 'var(--text-muted)', fontSize: 10, marginBottom: entries.length > 0 ? 6 : 0 }}>
-                            by <span style={{ fontWeight: 600 }}>{log.changed_by_email || 'unknown'}</span>
-                          </div>
-
-                          {/* For CREATED entries show all fields as a grid */}
-                          {isCreated && Object.entries(fields).length > 0 && (
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginTop: 4 }}>
-                              {Object.entries(fields).map(([k, v]) => (
-                                <div key={k} style={{ fontSize: 10 }}>
-                                  <span style={{ fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: 9 }}>
-                                    {k.replace(/_/g, ' ')}:{' '}
-                                  </span>
-                                  <span style={{ color: 'var(--text-primary)' }}>{v || <em style={{ opacity: 0.4 }}>empty</em>}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* For EDITED entries show diff */}
-                          {!isCreated && entries.map(([f, d]) => (
-                            <div key={f} style={{ fontSize: 10, marginTop: 3 }}>
-                              <span style={{ fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: 9 }}>
-                                {f.replace(/_/g, ' ')}:{' '}
+                        return (
+                          <div
+                            key={log.id || i}
+                            style={{
+                              borderRadius: 8,
+                              border: `1px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'}`,
+                              background: isDark ? 'rgba(255,255,255,0.03)' : 'white',
+                              padding: '8px 12px',
+                              fontSize: 11,
+                            }}
+                          >
+                            {/* Row: badge + timestamp */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5, flexWrap: 'wrap' }}>
+                              <span style={{
+                                fontSize: 9,
+                                fontWeight: 800,
+                                padding: '2px 8px',
+                                borderRadius: 4,
+                                background: `${actionColor}18`,
+                                color: actionColor,
+                                border: `1px solid ${actionColor}30`,
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.4px',
+                              }}>
+                                {log.action}
                               </span>
-                              <span style={{ textDecoration: 'line-through', color: '#ef4444' }}>{d.from || '—'}</span>
-                              <span style={{ color: 'var(--text-muted)' }}> → </span>
-                              <span style={{ color: '#10b981', fontWeight: 600 }}>{d.to || '—'}</span>
+                              <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: 'var(--text-muted)' }}>
+                                {fmtAuditTime(log.changed_at_ist)} IST
+                              </span>
                             </div>
-                          ))}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+
+                            {/* Changed by */}
+                            <div style={{ color: 'var(--text-muted)', fontSize: 10, marginBottom: entries.length > 0 ? 6 : 0 }}>
+                              by <span style={{ fontWeight: 600 }}>{log.changed_by_email || 'unknown'}</span>
+                            </div>
+
+                            {/* For CREATED entries show all fields as a grid */}
+                            {isCreated && Object.entries(fields).length > 0 && (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginTop: 4 }}>
+                                {Object.entries(fields).map(([k, v]) => (
+                                  <div key={k} style={{ fontSize: 10 }}>
+                                    <span style={{ fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: 9 }}>
+                                      {k.replace(/_/g, ' ')}:{' '}
+                                    </span>
+                                    <span style={{ color: 'var(--text-primary)' }}>{v || <em style={{ opacity: 0.4 }}>empty</em>}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* For EDITED entries show diff */}
+                            {!isCreated && entries.map(([f, d]) => (
+                              <div key={f} style={{ fontSize: 10, marginTop: 3 }}>
+                                <span style={{ fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: 9 }}>
+                                  {f.replace(/_/g, ' ')}:{' '}
+                                </span>
+                                <span style={{ textDecoration: 'line-through', color: '#ef4444' }}>{d.from || '—'}</span>
+                                <span style={{ color: 'var(--text-muted)' }}> → </span>
+                                <span style={{ color: '#10b981', fontWeight: 600 }}>{d.to || '—'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </td>
         </tr>
@@ -392,6 +397,8 @@ const ReceiptDetailRow = ({ h, isDark, apiUrl }) => {
 
 const Verify = ({ theme }) => {
   const isDark = theme === 'dark';
+  // Audit-log visibility is restricted to admins (role stored in localStorage).
+  const isAdmin = localStorage.getItem('userRole') === 'admin';
   const [fileNumber, setFileNumber]   = useState("");
   const [loadingLocal, setLoadingLocal] = useState(false);
   const [loadingRMS, setLoadingRMS]   = useState(false);
@@ -892,6 +899,7 @@ const Verify = ({ theme }) => {
                                 key={`${h.receipt_no}-${i}`}
                                 h={h}
                                 isDark={isDark}
+                                isAdmin={isAdmin}
                                 apiUrl={LOCAL_API_URL}
                               />
                             ))}

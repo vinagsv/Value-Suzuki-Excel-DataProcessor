@@ -332,22 +332,36 @@ const NavbarStyle = () => (
   `}</style>
 );
 
-// ── Pages shown in the horizontal nav bar (desktop) ───────────────────────────
-const pages = [
-  { id: "receipt",     name: "Receipt"     },
-  { id: "archive",     name: "Archives"    },
-  { id: "verify",      name: "Verify"      },
-  { id: "pricelist",   name: "Price List"  },
-  { id: "gatepass",    name: "Gate Pass"   },
-  { id: "dp_receipt",  name: "DP Receipt"  },
-  { id: "tools",       name: "Tools"       },
-  { id: "tally",       name: "TALLY"       },
-  { id: "attendance",  name: "Attendance"  },
+const publicPages = [
+  { id: "login",      name: "Login" },
+  { id: "pricelist",  name: "Price List" },
+  { id: "dp_receipt", name: "DP Receipt" },
+  { id: "tools",      name: "Tools" },
+  { id: "attendance", name: "Attendance" },
 ];
 
-// Pages accessible on mobile via the hamburger dropdown
-const mobilePages = [
-  { id: "receipt",    name: "Receipt",   icon: "🧾" },
+const privatePages = [
+  { id: "receipt",    name: "Receipt" },
+  { id: "archive",    name: "Archives" },
+  { id: "verify",     name: "Verify" },
+  { id: "pricelist",  name: "Price List" },
+  { id: "gatepass",   name: "Gate Pass" },
+  { id: "dp_receipt", name: "DP Receipt" },
+  { id: "tools",      name: "Tools" },
+  { id: "tally",      name: "TALLY" },
+  { id: "attendance", name: "Attendance" },
+];
+
+const mobilePublicPages = [
+  { id: "login",      name: "Login",      icon: "🔑" },
+  { id: "pricelist",  name: "Price List", icon: "📄" },
+  { id: "dp_receipt", name: "DP Receipt", icon: "💳" },
+  { id: "tools",      name: "Tools",      icon: "🛠️" },
+  { id: "attendance", name: "Attendance", icon: "📅" },
+];
+
+const mobilePrivatePages = [
+  { id: "receipt",    name: "Receipt",    icon: "🧾" },
   { id: "archive",    name: "Archives",  icon: "📂" },
   { id: "verify",     name: "Verify",    icon: "🔍" },
   { id: "gatepass",   name: "Gate Pass", icon: "🚗" },
@@ -355,6 +369,7 @@ const mobilePages = [
   { id: "attendance", name: "Attendance",icon: "📅" },
   { id: "pricelist",  name: "Price List",icon: "📄" },
 ];
+
 
 const Navbar = ({
   activePage,
@@ -365,6 +380,7 @@ const Navbar = ({
   userRole,
   isCalcOpen,
   toggleCalculator,
+  isAuthenticated
 }) => {
   const isDark = theme === "dark";
   const mode = isDark ? "dark" : "light";
@@ -375,7 +391,9 @@ const Navbar = ({
   const [isMobile, setIsMobile]             = useState(window.innerWidth < 1024);
   const menuRef = useRef(null);
 
-  // Track mobile vs desktop
+  const pages = isAuthenticated ? privatePages : publicPages;
+  const mobilePagesList = isAuthenticated ? mobilePrivatePages : mobilePublicPages;
+
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
     window.addEventListener("resize", handleResize);
@@ -396,7 +414,7 @@ const Navbar = ({
     const ro = new ResizeObserver(checkScroll);
     if (el) ro.observe(el);
     return () => { el?.removeEventListener("scroll", checkScroll); ro.disconnect(); };
-  }, []);
+  }, [pages]);
 
   useEffect(() => {
     const handle = (e) => {
@@ -422,7 +440,7 @@ const Navbar = ({
       <NavbarStyle />
       <nav className={`nb-root ${mode}`}>
 
-        {/* Brand — text only, no icon */}
+        {/* Brand */}
         <div className="nb-brand">
           <span className="nb-brand-text">
             Value<span>One</span>
@@ -464,7 +482,7 @@ const Navbar = ({
 
         {/* Action bar */}
         <div className="nb-actions">
-          {/* Calculator — desktop only (hidden via CSS on mobile) */}
+          {/* Calculator */}
           <button
             onClick={toggleCalculator}
             data-tip="Calculator"
@@ -501,7 +519,7 @@ const Navbar = ({
                 {isMobile && (
                   <>
                     <div className="nb-dropdown-section-label">Navigate</div>
-                    {mobilePages.map(p => (
+                    {mobilePagesList.map(p => (
                       <button
                         key={p.id}
                         className={`nb-dropdown-btn${activePage === p.id ? " active" : ""}`}
@@ -516,7 +534,7 @@ const Navbar = ({
                 )}
 
                 {/* ── ADMIN SECTION ── */}
-                {userRole === "admin" && (
+                {isAuthenticated && userRole === "admin" && (
                   <>
                     <div className="nb-dropdown-section-label">Admin</div>
                     <button
@@ -535,29 +553,33 @@ const Navbar = ({
                   </>
                 )}
 
-                {/* ── GENERAL SECTION ── */}
-                <button
-                  className={`nb-dropdown-btn${activePage === "info" ? " active" : ""}`}
-                  onClick={() => navigate("info")}
-                >
-                  <Info size={16} /> Info & Docs
-                </button>
+                {/* ── GENERAL SECTION (Protected) ── */}
+                {isAuthenticated && (
+                  <>
+                    <button
+                      className={`nb-dropdown-btn${activePage === "info" ? " active" : ""}`}
+                      onClick={() => navigate("info")}
+                    >
+                      <Info size={16} /> Info & Docs
+                    </button>
 
-                <button
-                  className={`nb-dropdown-btn${activePage === "profile" ? " active" : ""}`}
-                  onClick={() => navigate("profile")}
-                >
-                  <UserCircle size={16} /> Profile
-                </button>
+                    <button
+                      className={`nb-dropdown-btn${activePage === "profile" ? " active" : ""}`}
+                      onClick={() => navigate("profile")}
+                    >
+                      <UserCircle size={16} /> Profile
+                    </button>
 
-                <div className="nb-dropdown-divider" />
+                    <div className="nb-dropdown-divider" />
 
-                <button
-                  className="nb-dropdown-btn logout"
-                  onClick={() => { onLogout(); setIsMenuOpen(false); }}
-                >
-                  <LogOut size={16} /> Logout
-                </button>
+                    <button
+                      className="nb-dropdown-btn logout"
+                      onClick={() => { onLogout(); setIsMenuOpen(false); }}
+                    >
+                      <LogOut size={16} /> Logout
+                    </button>
+                  </>
+                )}
 
               </div>
             )}

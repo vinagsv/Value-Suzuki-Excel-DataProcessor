@@ -45,14 +45,15 @@ app.use(cookieParser());
 
 // Public Routes
 app.use('/api/auth', authRoutes);
+// Made public as per requirement
+app.use('/api/receipts', receiptRoutes); // DP Receipts
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/pricelist', pricelistRoutes);
 
 // Protected Routes
 app.use('/api/form22', verifyToken, form22Routes);
 app.use('/api/gatepass', verifyToken, gatepassRoutes);
-app.use('/api/receipts', verifyToken, receiptRoutes);
-app.use('/api/attendance', verifyToken, attendanceRoutes);
 app.use('/api/general-receipts', verifyToken, generalReceiptRoutes);
-app.use('/api/pricelist', verifyToken, pricelistRoutes);
 
 // Audit log: requires auth. Per-receipt history (GET /:receipt_no) and writes
 // (POST /) are available to all authenticated users; the full cross-receipt

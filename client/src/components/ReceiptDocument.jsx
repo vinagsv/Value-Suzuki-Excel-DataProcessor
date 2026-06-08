@@ -359,6 +359,8 @@ export const ReceiptBody = ({ formData, currentFilePrefix, qrDataUrl, qrEnabled,
  * The hidden div that react-to-print targets.
  * Renders two copies (customer + office) on one A4 page.
  * Attach `componentRef` to this via the `printRef` prop.
+ *
+ * NOTE: Still used by ArchivePage's "Print" (both copies) button — keep as is.
  */
 export const ReceiptPrintLayout = ({ formData, currentFilePrefix, qrDataUrl, qrEnabled, amountInWords, printRef }) => (
   <div
@@ -382,6 +384,31 @@ export const ReceiptPrintLayout = ({ formData, currentFilePrefix, qrDataUrl, qrE
     <div style={{ display: 'flex', flexDirection: 'column', marginLeft: '15mm' }}>
       <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '10px', textTransform: 'uppercase', marginBottom: '1mm', letterSpacing: '0.15em', color: '#6b7280' }}>OFFICE COPY</div>
       <div style={{ width: '185mm', height: '120mm', border: '3px solid black', borderRadius: '8px', boxSizing: 'border-box', backgroundColor: 'white', color: 'black', position: 'relative', overflow: 'hidden' }}>
+        <ReceiptBody formData={formData} currentFilePrefix={currentFilePrefix} qrDataUrl={qrDataUrl} qrEnabled={qrEnabled} amountInWords={amountInWords} />
+      </div>
+    </div>
+  </div>
+);
+
+// ── CustomerCopyPrintLayout ───────────────────────────────────────────────────
+/**
+ * Prints ONLY the customer copy, with no copy label.
+ * Used by the main Receipt screen (default ReceiptDocument export).
+ * Styling of the receipt itself is identical to the customer copy above.
+ */
+export const CustomerCopyPrintLayout = ({ formData, currentFilePrefix, qrDataUrl, qrEnabled, amountInWords, printRef }) => (
+  <div
+    ref={printRef}
+    style={{ width: '210mm', minHeight: '297mm', padding: '5mm', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', backgroundColor: 'white', fontFamily: 'sans-serif' }}
+  >
+    <style type="text/css" media="print">
+      {tailwindStyles}
+      {`@page { size: A4 portrait; margin: 0mm !important; } html, body { margin: 0 !important; padding: 0 !important; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }`}
+    </style>
+
+    {/* Customer copy only — no label */}
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: '200mm', height: '120mm', border: '3px solid black', borderRadius: '8px', boxSizing: 'border-box', backgroundColor: 'white', color: 'black', position: 'relative', overflow: 'hidden' }}>
         <ReceiptBody formData={formData} currentFilePrefix={currentFilePrefix} qrDataUrl={qrDataUrl} qrEnabled={qrEnabled} amountInWords={amountInWords} />
       </div>
     </div>
@@ -413,10 +440,10 @@ export const OfficeCopyPrintLayout = ({ formData, currentFilePrefix, qrDataUrl, 
  * The live preview panel shown to the right of the form (desktop only).
  * Handles its own ResizeObserver-based scaling via previewPanelRef + previewScale.
  */
-export const ReceiptPreview = ({ formData, currentFilePrefix, qrDataUrl, qrEnabled, amountInWords, previewPanelRef, previewScale, isDark }) => (
+export const ReceiptPreview = ({ formData, currentFilePrefix, qrDataUrl, qrEnabled, amountInWords, previewPanelRef, previewScale, isDark, className }) => (
   <div
     ref={previewPanelRef}
-    className={`hidden lg:flex w-full lg:flex-1 rounded-xl p-4 overflow-hidden items-start justify-center ${isDark ? 'bg-gray-700/50' : 'bg-gray-200'}`}
+    className={className || `hidden lg:flex w-full lg:flex-1 rounded-xl p-4 overflow-hidden items-start justify-center ${isDark ? 'bg-gray-700/50' : 'bg-gray-200'}`}
   >
     <div style={{ width: '100%', height: `${PREVIEW_NATURAL_H * previewScale}px`, position: 'relative' }}>
       <div style={{
@@ -443,6 +470,8 @@ export const ReceiptPreview = ({ formData, currentFilePrefix, qrDataUrl, qrEnabl
 /**
  * Renders both the preview panel AND the hidden print target together.
  * Use this in Receipt.jsx to get both in one import.
+ *
+ * The hidden print target prints ONLY the customer copy (no office copy, no label).
  */
 const ReceiptDocument = ({
   formData,
@@ -468,9 +497,9 @@ const ReceiptDocument = ({
       isDark={isDark}
     />
 
-    {/* Hidden print target */}
+    {/* Hidden print target — customer copy only */}
     <div className="print-only" style={{ position: 'absolute', overflow: 'hidden', height: 0, width: 0, top: '-9999px', left: '-9999px' }}>
-      <ReceiptPrintLayout
+      <CustomerCopyPrintLayout
         formData={formData}
         currentFilePrefix={currentFilePrefix}
         qrDataUrl={qrDataUrl}

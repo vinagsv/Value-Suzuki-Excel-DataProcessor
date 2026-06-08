@@ -526,7 +526,7 @@ const Receipt = ({ theme }) => {
     }
   };
 
-  // ── Mobile print ───────────────────────────────────────────────────────────
+  // ── Mobile print — single customer copy only (no office copy, no labels) ───
   const handleMobilePrint = async () => {
     if (serverError) { if (window.toast) window.toast('System Offline: Cannot print.', 'error'); setIsPrinting(false); return; }
     if (!formData.amount || isNaN(formData.amount)) { if (window.toast) window.toast('Please enter a valid amount.', 'error'); setIsPrinting(false); return; }
@@ -541,7 +541,6 @@ const Receipt = ({ theme }) => {
 
     const sharedArgs   = { formData, currentFilePrefix, qrDataUrl: qrUrl, qrEnabled, amountInWords };
     const receiptBody1 = buildReceiptHtmlString(sharedArgs);
-    const receiptBody2 = buildReceiptHtmlString(sharedArgs);
 
     const fullHtml = `<!DOCTYPE html>
 <html>
@@ -552,24 +551,17 @@ const Receipt = ({ theme }) => {
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 210mm; background: white; font-family: sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .page-wrap { width: 210mm; min-height: 297mm; padding: 5mm; display: flex; flex-direction: column; gap: 12mm; background: white; }
+    .page-wrap { width: 210mm; min-height: 297mm; padding: 5mm; display: flex; flex-direction: column; background: white; }
     .receipt-block { display: flex; flex-direction: column; }
-    .copy-label { text-align: right; font-weight: bold; font-size: 10px; text-transform: uppercase; margin-bottom: 1mm; letter-spacing: 0.15em; color: #6b7280; font-family: sans-serif; }
     .receipt-outer { border: 3px solid black; border-radius: 8px; background: white; color: black; position: relative; overflow: hidden; }
     .customer-copy { width: 200mm; height: 120mm; }
-    .office-copy   { width: 185mm; height: 120mm; margin-left: 15mm; }
     @media print { @page { size: A4 portrait; margin: 0mm !important; } html, body { margin: 0 !important; padding: 0 !important; } }
   </style>
 </head>
 <body>
   <div class="page-wrap">
     <div class="receipt-block">
-      <div class="copy-label">CUSTOMER COPY</div>
       <div class="receipt-outer customer-copy">${receiptBody1}</div>
-    </div>
-    <div class="receipt-block">
-      <div class="copy-label">OFFICE COPY</div>
-      <div class="receipt-outer office-copy">${receiptBody2}</div>
     </div>
   </div>
 </body>

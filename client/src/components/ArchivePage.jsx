@@ -25,7 +25,7 @@ const toWords = new ToWords({
   converterOptions: { currency: false, ignoreDecimal: false, ignoreZeroCurrency: false, doNotAddOnly: true },
 });
 
-const toTitleCase  = s => s ? s.toLowerCase().split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ') : '';
+const toTitleCase  = s => s ? String(s).toLowerCase().split(' ').map(w => w ? w[0].toUpperCase() + w.slice(1) : w).join(' ') : '';
 const extractSeq   = fn => { if (!fn) return ''; const c = fn.replace(/\s/g,''); if (c.includes('/')) return c.split('/').pop(); if (c.includes('-')) return c.split('-').pop(); return c.replace(/^[A-Za-z]+/,''); };
 const extractPfx   = (fn, seq) => { if (!fn||!seq) return ''; return fn.replace(/\s/g,'').slice(0, fn.replace(/\s/g,'').length - seq.length); };
 const fmtAuditTime = ist => { if (!ist) return ''; const [d,t] = ist.split(' '); if (!d) return ist; const [y,m,dd] = d.split('-'); return `${dd}-${m}-${y} ${t||''}`; };
@@ -188,7 +188,7 @@ const AuditPanel = ({ receiptNo, isDark }) => {
 };
 
 // ── Receipt Detail Card (mobile) ──────────────────────────────────────────────
-const MobileReceiptDetail = ({ item, formData, currentFilePrefix, isDark, onBack, onEdit, onSave, onCancel, onPrint, isPrinting, serverError, setFormData, setCurrentFilePrefix, printRef, receiptProps }) => {
+const MobileReceiptDetail = ({ item, formData, currentFilePrefix, isDark, isAdmin, onBack, onEdit, onSave, onCancel, onPrint, isPrinting, serverError, setFormData, setCurrentFilePrefix, printRef, receiptProps }) => {
   const [mode, setMode] = useState('view'); // 'view' | 'edit'
   const mu   = isDark ? 'text-gray-400' : 'text-gray-500';
   const tpri = isDark ? 'text-white' : 'text-gray-900';
@@ -255,8 +255,8 @@ const MobileReceiptDetail = ({ item, formData, currentFilePrefix, isDark, onBack
               </div>
             </div>
 
-            {/* Audit log */}
-            <AuditPanel receiptNo={item.receipt_no} isDark={isDark}/>
+            {/* Audit log — admin only */}
+            {isAdmin && <AuditPanel receiptNo={item.receipt_no} isDark={isDark}/>}
 
             {/* Print button */}
             <button
@@ -374,6 +374,7 @@ const ArchivePage = ({ theme, initialScanTarget, onScanTargetConsumed }) => {
   const printRef = useRef(null);
   const officePrintRef = useRef(null);
   const isMobile = isMobileDevice();
+  const isAdmin  = localStorage.getItem('userRole') === 'admin';
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [receipts, setReceipts]       = useState([]);
@@ -389,6 +390,7 @@ const ArchivePage = ({ theme, initialScanTarget, onScanTargetConsumed }) => {
   const [scanResult, setScanResult]   = useState(null);
   const [serverError, setServerError] = useState(false);
   const [isPrinting, setIsPrinting]   = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [exportRange, setExportRange] = useState({ from: '', to: '' });
   const [qrEnabled, setQrEnabled]     = useState(true);
   const [page, setPage]               = useState(1);
@@ -633,7 +635,7 @@ const ArchivePage = ({ theme, initialScanTarget, onScanTargetConsumed }) => {
   });
   const handleOfficePrint = () => { setIsPrinting(true); setTimeout(() => triggerOfficePrint(), 100); };
 
-  // ── Export ─────────────────────────────────────────────────────────────────
+  // ── Export (Excel) ─────────────────────────────────────────────────────────
   const handleExport = () => {
     let data = receipts;
     if (exportRange.from && exportRange.to)
@@ -645,6 +647,118 @@ const ArchivePage = ({ theme, initialScanTarget, onScanTargetConsumed }) => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Receipts');
     XLSX.writeFile(wb, 'Archive_Receipts.xlsx');
+  };
+
+  // ── Export (PDF) — portrait A4, only the essential columns ──────────────────
+  // Pulls the COMPLETE dataset from /list/all (the list view is paginated, so
+  // exporting `receipts` alone would only contain the current page — that was
+  // why earlier exports looked empty). Falls back to whatever is in state if
+  // the fetch fails. Columns: Customer, Receipt No, Date, Amount, File No, By Way Of.
+  const handleExportPdf = async () => {
+    setIsExportingPdf(true);
+    try {
+      let data = [];
+      try {
+        const res = await fetch(`${API_URL}/general-receipts/list/all`);
+        if (!res.ok) throw new Error('fetch failed');
+        const raw = await res.json();
+        data = Array.isArray(raw) ? raw : (raw.rows || []);
+      } catch {
+        // Graceful degradation — use the in-memory page
+        data = receipts;
+        if (window.toast) window.toast('Using current view — could not load full archive.', 'info');
+      }
+
+      if (exportRange.from && exportRange.to)
+        data = data.filter(r => { const d = (r.date || '').substring(0,10); return d >= exportRange.from && d <= exportRange.to; });
+
+      const rows = [...data].sort((a,b) => {
+        const diff = new Date(a.date) - new Date(b.date);
+        return diff !== 0 ? diff : parseInt(a.receipt_no) - parseInt(b.receipt_no);
+      }).map(r => ({
+        receipt:   r.receipt_no,
+        date:      formatDate(r.date),
+        customer:  toTitleCase(r.customer_name || ''),
+        amountNum: Number(r.amount) || 0,
+        file:      r.file_no || '',
+        mode:      r.payment_mode || '',
+        status:    r.status || 'ACTIVE',
+      }));
+
+      if (rows.length === 0) {
+        if (window.toast) window.toast('No receipts to export for this range.', 'error');
+        return;
+      }
+
+      const total = rows.reduce((s, r) => s + (r.amountNum || 0), 0);
+      const rangeLabel = exportRange.from && exportRange.to
+        ? `${formatDate(exportRange.from)} to ${formatDate(exportRange.to)}` : 'All Records';
+
+      const esc = (v) => String(v ?? '').replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c]));
+
+      const bodyRows = rows.map(r => `
+        <tr class="${r.status === 'CANCELLED' ? 'cancelled' : ''}">
+          <td class="mono">${esc(r.receipt)}</td>
+          <td>${esc(r.date)}</td>
+          <td>${esc(r.customer)}</td>
+          <td class="num">&#8377;${r.amountNum.toLocaleString('en-IN')}</td>
+          <td class="mono">${esc(r.file)}</td>
+          <td>${esc(r.mode)}</td>
+        </tr>`).join('');
+
+      // All body text is forced to solid #000 for maximum print contrast.
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+        <title>Archive_Receipts</title>
+        <style>
+          @page { size: A4 portrait; margin: 12mm; }
+          * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #000; margin: 0; font-size: 11px; }
+          .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px; }
+          .header h1 { margin: 0; font-size: 17px; font-weight: 800; color: #000; }
+          .header .meta { font-size: 11px; color: #000; margin-top: 3px; font-weight: 700; }
+          table { width: 100%; border-collapse: collapse; }
+          th { background: #1e293b; color: #fff; text-align: left; padding: 7px 8px; font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; }
+          td { padding: 6px 8px; border-bottom: 0.5px solid #94a3b8; vertical-align: top; color: #000; font-weight: 600; }
+          tr:nth-child(even) td { background: #eef2f7; }
+          .num { text-align: right; font-weight: 800; white-space: nowrap; color: #000; }
+          .mono { font-family: 'Courier New', monospace; color: #000; }
+          .cancelled td { color: #b91c1c; text-decoration: line-through; }
+          tfoot td { border-top: 2px solid #000; font-weight: 800; padding: 8px; font-size: 12px; color: #000; }
+          tfoot .num { color: #000; }
+        </style></head><body>
+          <div class="header">
+            <h1>Value Motor Agency Pvt Ltd &mdash; Receipt Archive</h1>
+            <div class="meta">${esc(rangeLabel)} &middot; ${rows.length} receipt(s)</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Receipt No</th><th>Date</th><th>Customer Name</th>
+                <th style="text-align:right">Amount</th><th>File No</th><th>By Way Of</th>
+              </tr>
+            </thead>
+            <tbody>${bodyRows}</tbody>
+            <tfoot>
+              <tr><td colspan="3">Total</td><td class="num">&#8377;${total.toLocaleString('en-IN')}</td><td colspan="2"></td></tr>
+            </tfoot>
+          </table>
+        </body></html>`;
+
+      const w = window.open('', '_blank');
+      if (!w) { if (window.toast) window.toast('Pop-ups blocked. Allow pop-ups to export PDF.', 'error'); return; }
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+      // Trigger print from the parent once the new window has parsed its content.
+      // Doing it here (rather than via an injected <script>) is far more reliable
+      // across browsers, and we deliberately do NOT auto-close so the user can
+      // pick "Save as PDF" without the page blanking out underneath them.
+      const doPrint = () => { try { w.focus(); w.print(); } catch {} };
+      if (w.document.readyState === 'complete') setTimeout(doPrint, 400);
+      else w.onload = () => setTimeout(doPrint, 400);
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   const handlePageChange = (newPage) => { setPage(newPage); fetchPage(searchTerm, newPage); };
@@ -764,6 +878,7 @@ const ArchivePage = ({ theme, initialScanTarget, onScanTargetConsumed }) => {
             formData={formData}
             currentFilePrefix={currentFilePrefix}
             isDark={isDark}
+            isAdmin={isAdmin}
             onBack={() => setMobileView('list')}
             onSave={handleSave}
             onCancel={handleCancelReceipt}
@@ -820,7 +935,11 @@ const ArchivePage = ({ theme, initialScanTarget, onScanTargetConsumed }) => {
             <input type="date" value={exportRange.from} onChange={e => setExportRange(p=>({...p,from:e.target.value}))} className={`bg-transparent text-xs outline-none ${isDark?'text-white':'text-gray-800'}`}/>
             <span className={tmut}>–</span>
             <input type="date" value={exportRange.to} onChange={e => setExportRange(p=>({...p,to:e.target.value}))} className={`bg-transparent text-xs outline-none ${isDark?'text-white':'text-gray-800'}`}/>
-            <button onClick={handleExport} className="bg-green-600 hover:bg-green-700 text-white px-2 py-0.5 rounded-lg text-[10px] font-bold ml-1 transition-colors">EXPORT</button>
+            <button onClick={handleExport} className="bg-green-600 hover:bg-green-700 text-white px-2 py-0.5 rounded-lg text-[10px] font-bold ml-1 transition-colors">EXCEL</button>
+            <button onClick={handleExportPdf} disabled={isExportingPdf}
+              className={`text-white px-2 py-0.5 rounded-lg text-[10px] font-bold ml-1 transition-colors flex items-center gap-1 ${isExportingPdf ? 'bg-red-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}>
+              {isExportingPdf ? <><RefreshCw size={10} className="animate-spin"/> PDF…</> : 'PDF'}
+            </button>
           </div>
           <button onClick={() => { setScanResult(null); setShowScanner(true); }}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs transition-all border shadow-sm backdrop-blur-md ${isDark?'bg-white/10 hover:bg-white/20 border-white/20 text-white':'bg-white/40 hover:bg-white/60 border-white/50 text-gray-800'}`}>
@@ -835,7 +954,6 @@ const ArchivePage = ({ theme, initialScanTarget, onScanTargetConsumed }) => {
 
       {/* Body */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left sidebar */}
         {/* Left sidebar */}
         <div className={`w-96 flex-shrink-0 flex flex-col border-r overflow-hidden shadow-lg ${card} rounded-none`}>
           <div className={`p-3 border-b ${isDark?'border-gray-700':'border-gray-200'}`}>
@@ -953,7 +1071,7 @@ const ArchivePage = ({ theme, initialScanTarget, onScanTargetConsumed }) => {
                         </div>
                       </div>
                     )}
-                    <AuditPanel receiptNo={selected.receipt_no} isDark={isDark}/>
+                    {isAdmin && <AuditPanel receiptNo={selected.receipt_no} isDark={isDark}/>}
                   </div>
                 </>
               )}
@@ -1018,10 +1136,12 @@ const ArchivePage = ({ theme, initialScanTarget, onScanTargetConsumed }) => {
                       </button>
                     </div>
                   </div>
-                  {/* Audit log in edit mode too */}
-                  <div className="max-w-lg mt-3">
-                    <AuditPanel receiptNo={selected.receipt_no} isDark={isDark}/>
-                  </div>
+                  {/* Audit log in edit mode too — admin only */}
+                  {isAdmin && (
+                    <div className="max-w-lg mt-3">
+                      <AuditPanel receiptNo={selected.receipt_no} isDark={isDark}/>
+                    </div>
+                  )}
                 </div>
               )}
             </>
